@@ -23,6 +23,7 @@ import {
   getNotifications,
   markNotificationRead,
   getUsers,
+  createNotification,
 } from '@/actions/ecocert'
 
 // ---------------------------------------------------------------------------
@@ -883,6 +884,31 @@ function TablePage({
             ]
           }),
         )
+        // RN-03: notify current user about documents expiring within 7, 15, or 30 days
+        if (currentUser?.id) {
+          const now = Date.now()
+          const thresholds = [
+            { days: 7, label: '7 días' },
+            { days: 15, label: '15 días' },
+            { days: 30, label: '30 días' },
+          ]
+          for (const doc of docs) {
+            const d = doc as { id?: string | number; title?: string; nextReview?: string }
+            if (!d.nextReview) continue
+            const diff = new Date(d.nextReview).getTime() - now
+            if (diff <= 0) continue
+            const diffDays = diff / (1000 * 60 * 60 * 24)
+            const threshold = thresholds.find((t) => diffDays <= t.days)
+            if (threshold) {
+              createNotification({
+                userId: currentUser.id,
+                type: 'expiry-warning',
+                message: `El requisito legal "${d.title ?? '—'}" vence en menos de ${threshold.label}.`,
+                reference: d.id ? String(d.id) : undefined,
+              }).catch(() => {/* non-blocking */})
+            }
+          }
+        }
       } else if (page === 'auditorias') {
         const res = await getAudits(organizationId)
         const docs = (res.data as unknown[]) ?? []

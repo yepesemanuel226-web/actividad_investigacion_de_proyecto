@@ -490,7 +490,7 @@ export async function updateLegalRequirement(
     await createAuditLog(
       'legal-requirements',
       String(id),
-      'editar',
+      'cambio_estado',
       'Requisito legal actualizado',
       orgId,
     )
