@@ -13,6 +13,7 @@
     "payload": "NODE_OPTIONS=--no-deprecation payload"
   },
   "dependencies": {
+    "@payloadcms/db-sqlite": "^3.93.0",
     "@payloadcms/figma": "1.0.0-beta.1",
     "@payloadcms/next": "4.0.0-beta.8",
     "@payloadcms/plugin-cloud-storage": "4.0.0-beta.8",
@@ -20,6 +21,7 @@
     "@payloadcms/richtext-lexical": "4.0.0-beta.8",
     "@payloadcms/translations": "4.0.0-beta.8",
     "@payloadcms/ui": "4.0.0-beta.8",
+    "better-sqlite3": "^13.1.1",
     "graphql": "^16.8.1",
     "html-react-parser": "^5.2.10",
     "monaco-editor": "0.55.1",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "24.12.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
