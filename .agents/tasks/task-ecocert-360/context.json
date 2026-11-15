@@ -1,0 +1,23 @@
+{
+  "project_type": "Next.js 16 App Router + Payload CMS 4 (beta.8) + Tailwind CSS v4, generated with Figma Make — platform-managed database and secrets via @payloadcms/figma",
+  "language": "TypeScript (6.0.3), React 19, Node >=24",
+  "build_system": "pnpm (v9/10/11). Build: `pnpm run build` (runs `payload build` → `next build`). NEVER run `pnpm install`. NEVER add new dependencies.",
+  "test_framework": "No test framework configured. Verification is TypeScript type generation.",
+  "build_command": "pnpm run build",
+  "test_command": "pnpm run generate:types",
+  "verification_instructions": "Run `cd \"c:\\Users\\emanu\\Downloads\\Web basada en especificaciones\" && pnpm run generate:types 2>&1 | head -60`. Must complete with no TypeScript errors. Output writes to src/payload-types.ts automatically — do NOT manually edit that file.",
+  "snapshot_or_generated_files": "src/payload-types.ts — regenerated automatically by `pnpm run generate:types` and by HMR. Never edit manually.",
+  "environment_constraints": "NEVER touch src/app/(payload)/ — it is Payload-managed. NEVER replace buildFigmaConfig with buildConfig in src/payload.config.ts. NEVER run pnpm install. Backend env vars (DB, secrets) are platform-owned and not available in a plain shell — if generate:types fails due to missing env vars, that is an environment limitation, not a code error. The dev server listens on $PORT (default 3000) and is assumed already running.",
+  "contribution_requirements": "Use buildFigmaConfig in payload.config.ts (already there). Keep ecoCertCollections spread. Do not modify src/app/(payload)/. overrideAccess: false on all user-facing Local API calls. Server Actions must have 'use server' at file top. Client Components have 'use client'. When a Client Component calls a Server Action inside useTransition, keep revalidatePath out of the action — return serializable result and call router.refresh() on client side after success.",
+  "key_patterns": "Collections: defined in src/collections/EcoCert.ts, exported as named constants + ecoCertCollections array. Access: appAccess const (create/delete/read/update: isAppUser) reused across all app collections. organizationField const reused as first field in every collection. payload.config.ts imports ecoCertCollections and spreads it — adding to ecoCertCollections array is sufficient to register. Server Actions: 'use server', getPayload({ config }), overrideAccess: false, return { success, data?, error? }. getCurrentUser uses cookies() + payload.auth({ headers }). EcoCertApp.tsx: single 'use client' SPA, ~1350 lines, all pages inside one file. useMemo drives page rendering. Static data arrays need to be replaced with useEffect + server action calls.",
+  "relevant_files": [
+    "src/collections/EcoCert.ts — extend fields and add 5 new collections",
+    "src/payload.config.ts — read-only; ecoCertCollections spread already handles new collections",
+    "src/actions/ecocert.ts — CREATE new file",
+    "src/app/(frontend)/EcoCertApp.tsx — modify in-place, wire all UI to actions",
+    "src/lib/payload.ts — reference for getPayloadClient pattern",
+    "src/app/(frontend)/styles.css — reference for .card, .field, .primary-btn, .secondary-btn, .section-title CSS classes",
+    "package.json — confirms react 19.3.1, payload 4.0.0-beta.8, next 16.4.2, no test runner"
+  ],
+  "directory_structure": "src/collections/ — Payload collection defs; src/actions/ — server actions (create this dir); src/app/(frontend)/ — all UI pages (do not create subdirs, single-SPA pattern); src/app/(payload)/ — DO NOT TOUCH; src/lib/ — shared utilities; .agents/tasks/ — plan artifacts"
+}

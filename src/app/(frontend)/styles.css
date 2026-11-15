@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-eco: #2f6b3f;
+}
+
+@layer base {
+  * {
+    border-color: #cbd8cb;
+  }
+
+  body {
+    color: #17251b;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    outline-color: #2f6b3f;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .card {
+    border: 1px solid #d8e2d8;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(23 37 27 / 0.03);
+  }
+
+  .field {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #cbd8cb;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .field:focus {
+    border-color: #2f6b3f;
+    box-shadow: 0 0 0 3px rgb(47 107 63 / 0.12);
+    outline: none;
+  }
+
+  .primary-btn {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    background: #2f6b3f;
+    padding: 0 16px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 160ms ease;
+  }
+
+  .primary-btn:hover {
+    background: #245431;
+  }
+
+  .secondary-btn {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid #cbd8cb;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0 14px;
+    color: #2f6b3f;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .section-title {
+    font-size: 18px;
+    line-height: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+}
+
+@media print {
+  aside,
+  header,
+  nav,
+  button {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+}
+
+.figma-custom-code-fragment {
+  display: contents;
+}
+
+.figma-bypass-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 2147483647;
+  transform: translateY(-150%);
+  border-radius: 6px;
+  background: #111827;
+  color: #fff;
+  padding: 8px 12px;
+  font:
+    600 14px/1.2 system-ui,
+    sans-serif;
+  text-decoration: none;
+}
+
+.figma-bypass-link:focus {
+  transform: translateY(0);
+}
