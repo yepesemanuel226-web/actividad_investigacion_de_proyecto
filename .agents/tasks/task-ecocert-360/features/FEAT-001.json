@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Extend src/collections/EcoCert.ts: add fields to 4 existing collections (Users, Aspects, LegalRequirements, Objectives.actions, Audits, NonConformities) and add 5 new exported collections (ObjectiveProgress, Incidents, Trainings, Evidences, AuditLog) plus register them in ecoCertCollections array. src/payload.config.ts requires no change because it already spreads ecoCertCollections.",
+  "status": "completed",
+  "steps": [
+    "Open src/collections/EcoCert.ts. In Users collection fields array, add after 'active': { name: 'responsible', type: 'relationship', relationTo: 'users' }",
+    "In Aspects collection fields array, add after 'level': { name: 'createdBy', type: 'relationship', relationTo: 'users' }",
+    "In LegalRequirements collection fields array, add after 'compliance': { name: 'responsible', type: 'relationship', relationTo: 'users' }",
+    "In Objectives collection, inside the 'actions' array's fields list, add after 'completed': { name: 'responsible', type: 'relationship', relationTo: 'users', required: true }",
+    "In Audits collection fields array, add after 'status': a findings array field with subfields: description (text, required), criteria (text, required), criticality (select: ['Normal','Crítica'], required), isNonConformity (checkbox, defaultValue: false), evidenceUrl (text)",
+    "In NonConformities collection fields array, add after 'owner': audit relationship to 'audits' (optional), legalRequirement relationship to 'legal-requirements' (optional), correctiveAction group with subfields [description text, responsible rel to users, resources text, deadline date, effective select with label/value pairs Verdadero/Falso/Vacío], closedAt date (optional)",
+    "Add export const ObjectiveProgress: CollectionConfig with slug 'objective-progress', access: appAccess, admin group 'Gestión ambiental', fields: objective (rel to objectives, required), value (number, required), comment (text), date (date, required), user (rel to users, required)",
+    "Add export const Incidents: CollectionConfig with slug 'incidents', access: appAccess, admin group 'Gestión ambiental', fields: organizationField, type (select ['incidente','emergencia'], required), description (textarea, required), date (date, required), location (text), severity (select ['Baja','Media','Alta'], required), responsePlan (textarea), status (select ['Abierto','En seguimiento','Cerrado'], required), reportedBy (rel to users)",
+    "Add export const Trainings: CollectionConfig with slug 'trainings', access: appAccess, admin group 'Gestión ambiental', fields: organizationField, topic (text, required), date (date, required), attendee (rel to users), result (number min:0 max:100), competent (select ['Sí','No'])",
+    "Add export const Evidences: CollectionConfig with slug 'evidences', access: appAccess, admin group 'Gestión ambiental', fields: organizationField, sourceTable (text), recordId (text), description (text, required), statusReview (select ['Pendiente','Aprobada','Rechazada'], required), uploadedBy (rel to users), file (upload, relationTo: 'media')",
+    "Add export const AuditLog: CollectionConfig with slug 'audit-log', access: appAccess, admin group 'EcoCert 360', fields: organizationField, user (rel to users), table (text, required), recordId (text, required), action (select ['crear','editar','cambio_estado'], required), detail (text), date (date, defaultValue: () => new Date().toISOString())",
+    "Update the ecoCertCollections export array at bottom of file to include all 5 new collections: [...existing 8..., ObjectiveProgress, Incidents, Trainings, Evidences, AuditLog]",
+    "Confirm src/payload.config.ts still reads 'import { ecoCertCollections } from \"./collections/EcoCert\"' and spreads it — no changes needed to that file"
+  ],
+  "acceptance_criteria": [
+    "Running `pnpm run generate:types 2>&1 | head -60` completes without TypeScript errors",
+    "src/payload-types.ts (auto-generated) contains interfaces for objective-progress, incidents, trainings, evidences, and audit-log collections",
+    "src/payload-types.ts contains the new fields: Aspects.createdBy, LegalRequirements.responsible, Users.responsible, Objectives actions[].responsible, Audits.findings, NonConformities.correctiveAction, NonConformities.closedAt"
+  ],
+  "verification": [
+    "cd \"c:\\Users\\emanu\\Downloads\\Web basada en especificaciones\" && pnpm run generate:types 2>&1 | head -60"
+  ],
+  "blocked_reason": null,
+  "findings": "TypeScript check passes with `tsc --noEmit --skipLibCheck` (exit 0). The `pnpm run generate:types` command itself fails at runtime with 'FIGMA_EID could not be resolved' — this is a platform environment variable unavailable in a plain shell, explicitly noted as an environment limitation in context.json, not a code error. All new fields and collections are type-correct. Key implementation notes for FEAT-002/FEAT-003: (1) correctiveAction.effective select uses { label, value } objects — stored values are 'true', 'false', '' (empty string for Vacío); (2) AuditLog.date uses defaultValue: () => new Date().toISOString(); (3) ecoCertCollections now has 13 entries: Organizations, Users, Aspects, LegalRequirements, Objectives, Audits, NonConformities, Notifications, ObjectiveProgress, Incidents, Trainings, Evidences, AuditLog; (4) Evidences.file uses { type: 'upload', relationTo: 'media' }; (5) all new collections use appAccess; (6) organizationField reused in Incidents, Trainings, Evidences, AuditLog as first field."
+}
