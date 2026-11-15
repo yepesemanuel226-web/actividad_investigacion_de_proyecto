@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Wire src/app/(frontend)/EcoCertApp.tsx to live data. Replace all static arrays with server action calls. Add AppContext for user/org state, real auth (login/register/session restore), role-gated UI, per-page CRUD modals, and notification system. Depends on FEAT-001 (collections) and FEAT-002 (actions). The file is 'use client' and already has useMemo + useState imported — add useEffect, useCallback, useTransition, createContext, useContext.",
-  "status": "pending",
+  "status": "completed",
   "steps": [
     "Add to existing imports at top of EcoCertApp.tsx: useEffect, useCallback, useTransition, createContext, useContext from 'react'. Add import of all needed server actions from '@/actions/ecocert'.",
     "Define AppContext just below imports: type AppUser = { id: string; name: string; role: string; email: string; organization?: { id: string; name: string } }. type AppCtx = { currentUser: AppUser | null; organizationId: string | null; setCurrentUser: (u: AppUser | null) => void }. const AppContext = createContext<AppCtx>({ currentUser: null, organizationId: null, setCurrentUser: () => {} }).",
@@ -40,5 +40,5 @@
     "cd \"c:\\Users\\emanu\\Downloads\\Web basada en especificaciones\" && pnpm run generate:types 2>&1 | head -60"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "TypeScript check passes (tsc --noEmit --skipLibCheck, exit 0). pnpm run generate:types fails with FIGMA_EID error (platform env var, known environment limitation from context.json). All FEAT-003 steps implemented: (1) AppContext created with AppUser type, organizationId derived from user.organization.id. (2) Login wired to loginUser/registerUser with inline error display; demo note div preserved. (3) EcoCertApp restores session on mount via getCurrentUser(); wraps shell in AppContext.Provider. (4) EcoCertShell reads currentUser from AppContext: dynamic greeting, real user name/role in sidebar footer, org name, role-gated nav items (usuarios/parametros hidden for non-admin). (5) Dashboard fetches getAspects/getObjectives/getNonConformities/getLegalRequirements/getNotifications in parallel; counts drive KPI cards with animate-pulse skeletons. (6) TablePage for all 7 table pages fetches live data via matching server actions; aspectos add button hidden for collaborator/auditor. (7) Modal extended per page: aspectos wires to createAspect with significance calc, legales to createLegalRequirement with user select, auditorias to createAudit with dynamic findings array, objetivos to createObjective with dynamic actions array and RN-05 validation, incidentes to createIncident, capacitacion to createTraining, evidencias to createEvidence with TODO note for file upload. (8) NonConformities kanban fetches getNonConformities and groups by status into 5 columns. (9) NotificationsPage fetches getNotifications; clicking marks read via markNotificationRead. (10) Bell badge only shown when unreadCount > 0. (11) formatDate helper and roleLabelMap constant added. File upload for evidences: TODO comment in UI; evidence record created without file as instructed."
 }
