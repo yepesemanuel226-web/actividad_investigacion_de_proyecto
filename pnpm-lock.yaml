@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@payloadcms/db-sqlite':
-        specifier: ^3.93.0
-        version: 3.93.0(@cloudflare/workers-types@5.20260716.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
+        specifier: 4.0.0-beta.8
+        version: 4.0.0-beta.8(@cloudflare/workers-types@5.20260716.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
       '@payloadcms/next':
         specifier: 4.0.0-beta.8
         version: 4.0.0-beta.8(@types/react@19.3.0)(graphql@16.15.0)(monaco-editor@0.55.1)(next@16.4.2(@types/node@24.12.3)(babel-plugin-macros@3.1.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sass@1.77.4))(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@6.0.3)
@@ -72,6 +72,9 @@ importers:
       '@types/react-dom':
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
+      cross-env:
+        specifier: ^10.1.0
+        version: 10.1.0
       oxfmt:
         specifier: ^0.73.0
         version: 0.73.0
@@ -223,6 +226,9 @@ packages:
 
   '@emotion/weak-memoize@0.4.0':
     resolution: {integrity: sha512-snKqtPW01tN0ui7yu9rGv69aJXr/a/Ywvl11sUjNtEcRc+ng/mQriFL0wLXMef74iHa/EkftbDzU9F8iFbH+zg==}
+
+  '@epic-web/invariant@1.0.0':
+    resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
@@ -1348,15 +1354,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@payloadcms/db-sqlite@3.93.0':
-    resolution: {integrity: sha512-8AdozgMyCcSsHgUbxp4OkzmkngAAZsk+BzoK9HCF3PeyWutU3XxGRMj0FIutZJ0vkNeAi6bruqYPbFpwVm8Leg==}
+  '@payloadcms/db-sqlite@4.0.0-beta.8':
+    resolution: {integrity: sha512-OeiMpkKtByhkhNkCmBXf1qNPiCWlYLOIGpAxLOORIPu2EpFtolkZ/MgB2tirYbW+C8VQ+J6VIC6CINKFYgA4jg==}
     peerDependencies:
-      payload: 3.93.0
+      payload: 4.0.0-beta.8
 
-  '@payloadcms/drizzle@3.93.0':
-    resolution: {integrity: sha512-4evWww1MCoRbgC5qO3sVRyaAu+Kt22WSXJ+deP15fpf5IAyg12WDBrCxElrQpPC7jWpY2XDf+JlN4428uQSuAg==}
+  '@payloadcms/drizzle@4.0.0-beta.8':
+    resolution: {integrity: sha512-VCvwkygA1zywhBvSRI1e/XkQocLmufn19Hhdxd6SXZSJz5Oe5XGNx2oRmZdGqsjMhB/eLXSw6khpuNIoPcb6BQ==}
     peerDependencies:
-      payload: 3.93.0
+      payload: 4.0.0-beta.8
 
   '@payloadcms/graphql@4.0.0-beta.8':
     resolution: {integrity: sha512-7gdOLekjUJy2+AGD5VTd5uKpYf3F7nPrGnVmbGRH9BDQZ6gjByH1GiyVdvHr1qInuzHQySf+T5rnkLO6fnW5NQ==}
@@ -1689,9 +1695,6 @@ packages:
   commander@2.20.3:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
 
-  console-table-printer@2.12.1:
-    resolution: {integrity: sha512-wKGOQRRvdnd89pCeH96e2Fn4wkbenSP6LMHfjfyNLMbGuHEFbMqQNuxXqd0oXG9caIOQ1FTvc5Uijp9/4jujnQ==}
-
   console-table-printer@2.15.0:
     resolution: {integrity: sha512-SrhBq4hYVjLCkBVOWaTzceJalvn5K1Zq5aQA6wXC/cYjI3frKWNPEMK3sZsJfNNQApvCQmgBcc13ZKmFj8qExw==}
 
@@ -1705,6 +1708,15 @@ packages:
   croner@10.0.1:
     resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
     engines: {node: '>=18.0'}
+
+  cross-env@10.1.0:
+    resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  cross-spawn@7.0.6:
+    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
+    engines: {node: '>= 8'}
 
   crypt@0.0.2:
     resolution: {integrity: sha512-mCxBlsHFYh9C+HVpiEacem8FEBnMXgU9gy4zmNC+SXAZNB/1idgp/aulFJ4FgCi7GPEVbfyng092GqL2k2rmow==}
@@ -2498,6 +2510,10 @@ packages:
     resolution: {integrity: sha512-1Y1A//QUXEZK7YKz+rD9WydcE1+EuPr6ZBgKecAB8tmoW6UFv0NREVJe1p+jRxtThkcbbKkfwIbWJe/IeE6m2Q==}
     engines: {node: '>=0.10.0'}
 
+  path-key@3.1.1:
+    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+    engines: {node: '>=8'}
+
   path-parse@1.0.7:
     resolution: {integrity: sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==}
 
@@ -2701,6 +2717,14 @@ packages:
       '@types/node':
         optional: true
 
+  shebang-command@2.0.0:
+    resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
+    engines: {node: '>=8'}
+
+  shebang-regex@3.0.0:
+    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
+    engines: {node: '>=8'}
+
   simple-wcswidth@1.1.2:
     resolution: {integrity: sha512-j7piyCjAeTDSjzTSQ7DokZtMNwNlEAyxqSZeCS+CXH7fJ4jx3FuJ/mTW3mE+6JLs4VJBbcll0Kjn+KXI5t21Iw==}
 
@@ -2890,10 +2914,6 @@ packages:
   utf8-byte-length@1.0.5:
     resolution: {integrity: sha512-Xn0w3MtiQ6zoz2vFyUVruaCL53O/DwUvkEeOvj+uulMm0BkUGYWmBYVyElqZaSLhY6ZD0ulfU3aBra2aVT4xfA==}
 
-  uuid@13.0.2:
-    resolution: {integrity: sha512-vzi9uRZ926x4XV73S/4qQaTwPXM2JBj6/6lI/byHH1jOpCzb0zDbfytgA9LcN/hzb2l7WQSQnxITOVx5un/wGw==}
-    hasBin: true
-
   uuid@14.0.0:
     resolution: {integrity: sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==}
     hasBin: true
@@ -2911,6 +2931,11 @@ packages:
 
   which@1.3.1:
     resolution: {integrity: sha512-HxJdYWq1MTIQbJ3nw0cqssHoTNU267KlrDuGZ1WYlxDStUtKUhOaJmh112/TZmHxxUfuJqPXSOm7tDyas0OSIQ==}
+    hasBin: true
+
+  which@2.0.2:
+    resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
+    engines: {node: '>= 8'}
     hasBin: true
 
   wrappy@1.0.2:
@@ -3122,6 +3147,8 @@ snapshots:
   '@emotion/utils@1.4.2': {}
 
   '@emotion/weak-memoize@0.4.0': {}
+
+  '@epic-web/invariant@1.0.0': {}
 
   '@esbuild-kit/core-utils@3.3.2':
     dependencies:
@@ -3937,17 +3964,17 @@ snapshots:
   '@oxfmt/binding-win32-x64-msvc@0.73.0':
     optional: true
 
-  '@payloadcms/db-sqlite@3.93.0(@cloudflare/workers-types@5.20260716.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)':
+  '@payloadcms/db-sqlite@4.0.0-beta.8(@cloudflare/workers-types@5.20260716.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)':
     dependencies:
       '@libsql/client': 0.14.0
-      '@payloadcms/drizzle': 3.93.0(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))
-      console-table-printer: 2.12.1
+      '@payloadcms/drizzle': 4.0.0-beta.8(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))
+      console-table-printer: 2.15.0
       drizzle-kit: 0.31.7(supports-color@10.2.2)
       drizzle-orm: 0.45.2(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)
       payload: 4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3)
       prompts: 2.4.2
       to-snake-case: 1.0.0
-      uuid: 13.0.2
+      uuid: 14.0.0
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
       - '@cloudflare/workers-types'
@@ -3981,15 +4008,15 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@payloadcms/drizzle@3.93.0(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))':
+  '@payloadcms/drizzle@4.0.0-beta.8(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)(payload@4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3))':
     dependencies:
-      console-table-printer: 2.12.1
+      console-table-printer: 2.15.0
       dequal: 2.0.3
       drizzle-orm: 0.45.2(@cloudflare/workers-types@5.20260716.1)(@libsql/client@0.14.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)
       payload: 4.0.0-beta.8(graphql@16.15.0)(supports-color@10.2.2)(typescript@6.0.3)
       prompts: 2.4.2
       to-snake-case: 1.0.0
-      uuid: 13.0.2
+      uuid: 14.0.0
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
       - '@cloudflare/workers-types'
@@ -4407,10 +4434,6 @@ snapshots:
 
   commander@2.20.3: {}
 
-  console-table-printer@2.12.1:
-    dependencies:
-      simple-wcswidth: 1.1.2
-
   console-table-printer@2.15.0:
     dependencies:
       simple-wcswidth: 1.1.2
@@ -4426,6 +4449,17 @@ snapshots:
       yaml: 1.10.3
 
   croner@10.0.1: {}
+
+  cross-env@10.1.0:
+    dependencies:
+      '@epic-web/invariant': 1.0.0
+      cross-spawn: 7.0.6
+
+  cross-spawn@7.0.6:
+    dependencies:
+      path-key: 3.1.1
+      shebang-command: 2.0.0
+      which: 2.0.2
 
   crypt@0.0.2: {}
 
@@ -5309,6 +5343,8 @@ snapshots:
 
   parse-passwd@1.0.0: {}
 
+  path-key@3.1.1: {}
+
   path-parse@1.0.7: {}
 
   path-to-regexp@6.3.0: {}
@@ -5576,6 +5612,12 @@ snapshots:
       '@img/sharp-win32-x64': 0.35.5
       '@types/node': 24.12.3
 
+  shebang-command@2.0.0:
+    dependencies:
+      shebang-regex: 3.0.0
+
+  shebang-regex@3.0.0: {}
+
   simple-wcswidth@1.1.2: {}
 
   sisteransi@1.0.5: {}
@@ -5736,8 +5778,6 @@ snapshots:
 
   utf8-byte-length@1.0.5: {}
 
-  uuid@13.0.2: {}
-
   uuid@14.0.0: {}
 
   vfile-message@4.0.4:
@@ -5750,6 +5790,10 @@ snapshots:
   whatwg-mimetype@3.0.0: {}
 
   which@1.3.1:
+    dependencies:
+      isexe: 2.0.0
+
+  which@2.0.2:
     dependencies:
       isexe: 2.0.0
 
