@@ -496,10 +496,12 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
           organization?: { id: string | number; name?: string } | string | number
         }
         const orgRaw = u.organization
-        const org =
-          orgRaw && typeof orgRaw === 'object' && 'id' in orgRaw
-            ? { id: String(orgRaw.id), name: (orgRaw as { id: string | number; name?: string }).name ?? '' }
-            : undefined
+        // orgRaw puede ser un objeto {id,name} o directamente un número/string (el ID)
+        const org = orgRaw
+          ? typeof orgRaw === 'object' && 'id' in orgRaw
+            ? { id: String((orgRaw as { id: string | number }).id), name: (orgRaw as { id: string | number; name?: string }).name ?? '' }
+            : { id: String(orgRaw), name: '' }
+          : undefined
         onLogin({
           id: String(u.id),
           name: u.name ?? email,
@@ -4334,13 +4336,11 @@ export default function EcoCertApp() {
           organization?: { id: string | number; name?: string } | string | number
         }
         const orgRaw = u.organization
-        const org =
-          orgRaw && typeof orgRaw === 'object' && 'id' in orgRaw
-            ? {
-                id: String(orgRaw.id),
-                name: (orgRaw as { id: string | number; name?: string }).name ?? '',
-              }
-            : undefined
+        const org = orgRaw
+          ? typeof orgRaw === 'object' && 'id' in orgRaw
+            ? { id: String((orgRaw as { id: string | number }).id), name: (orgRaw as { id: string | number; name?: string }).name ?? '' }
+            : { id: String(orgRaw), name: '' }
+          : undefined
         const appUser: AppUser = {
           id: String(u.id),
           name: u.name ?? '',
