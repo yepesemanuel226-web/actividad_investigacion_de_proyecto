@@ -349,7 +349,7 @@ export async function getAspects(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'aspects',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -501,7 +501,7 @@ export async function getLegalRequirements(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'legal-requirements',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -646,7 +646,7 @@ export async function getObjectives(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'objectives',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -801,7 +801,7 @@ export async function getAudits(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'audits',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -979,7 +979,7 @@ export async function getNonConformities(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'non-conformities',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -1075,7 +1075,7 @@ export async function getIncidents(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'incidents',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -1122,7 +1122,7 @@ export async function getTrainings(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'trainings',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
@@ -1169,7 +1169,7 @@ export async function getEvidences(orgId: string): ActionResult {
     const result = await payload.find({
       collection: 'evidences',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
       limit: 500,
     })
     return { success: true, data: result.docs }
