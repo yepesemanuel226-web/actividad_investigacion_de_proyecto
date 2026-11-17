@@ -32,7 +32,18 @@ EcoCert 360 centraliza la gestión del Sistema de Gestión Ambiental (SGA) de un
 https://actividad-investigacion-de-proyecto.vercel.app
 ```
 
-> Ver [CREDENCIALES.md](./CREDENCIALES.md) para los usuarios de prueba con datos precargados.
+### 👥 Usuarios de prueba — contraseña universal: `Demo1234!`
+
+| Rol | Correo |
+|---|---|
+| Administrador | `admin@ecoverde.co` |
+| Alta Dirección | `direccion@ecoverde.co` |
+| Responsable Ambiental | `ambiental@ecoverde.co` |
+| Auditor | `auditor@ecoverde.co` |
+| Colaborador | `colaborador@ecoverde.co` |
+| Proveedor | `proveedor@ecoverde.co` |
+
+> Ver [CREDENCIALES.md](./CREDENCIALES.md) para más detalle sobre cada rol y los datos precargados.
 
 ---
 
