@@ -1373,14 +1373,20 @@ function TablePage({
             const doc = d as {
               title?: string
               issuer?: string
-              aspect?: string
+              aspect?: { name?: string } | string | number | null
               nextReview?: string
               compliance?: string
             }
+            // aspect puede llegar como objeto {id, name} o string — extraer el nombre
+            const aspectName = doc.aspect
+              ? typeof doc.aspect === 'object' && 'name' in doc.aspect
+                ? (doc.aspect as { name?: string }).name ?? '—'
+                : String(doc.aspect)
+              : '—'
             return [
               doc.title ?? '—',
               doc.issuer ?? '—',
-              doc.aspect ?? '—',
+              aspectName,
               formatDate(doc.nextReview),
               doc.compliance ?? 'Sin evaluar',
             ]
@@ -4324,8 +4330,20 @@ export default function EcoCertApp() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
 
-  // Restore session on mount
+  // Restore session from localStorage (cookies de Payload no se propagan en Vercel)
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ecocert_user')
+      if (saved) {
+        const user = JSON.parse(saved) as AppUser
+        if (user?.id && user?.organization?.id) {
+          setCurrentUser(user)
+          setLoggedIn(true)
+          return
+        }
+      }
+    } catch {}
+    // Fallback: intentar con getCurrentUser si no hay localStorage
     getCurrentUser().then((res) => {
       if (res.success && res.data) {
         const u = res.data as {
@@ -4341,15 +4359,18 @@ export default function EcoCertApp() {
             ? { id: String((orgRaw as { id: string | number }).id), name: (orgRaw as { id: string | number; name?: string }).name ?? '' }
             : { id: String(orgRaw), name: '' }
           : undefined
-        const appUser: AppUser = {
-          id: String(u.id),
-          name: u.name ?? '',
-          email: u.email ?? '',
-          role: u.role ?? 'collaborator',
-          organization: org,
+        if (org?.id) {
+          const appUser: AppUser = {
+            id: String(u.id),
+            name: u.name ?? '',
+            email: u.email ?? '',
+            role: u.role ?? 'collaborator',
+            organization: org,
+          }
+          setCurrentUser(appUser)
+          setLoggedIn(true)
+          localStorage.setItem('ecocert_user', JSON.stringify(appUser))
         }
-        setCurrentUser(appUser)
-        setLoggedIn(true)
       }
     })
   }, [])
