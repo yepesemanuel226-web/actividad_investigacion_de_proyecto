@@ -1,7 +1,6 @@
 allowBuilds:
   esbuild: true
   better-sqlite3: true
-# Keep host-native binaries for builds and Linux ARM64 binaries for Lambda.
 supportedArchitectures:
   os:
     - current
