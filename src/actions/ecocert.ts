@@ -26,6 +26,7 @@ export async function loginUser(email: string, password: string): ActionResult {
       collection: 'users',
       data: { email, password },
       overrideAccess: false,
+      depth: 2, // incluir organización como objeto {id, name, status}
     })
 
     // Verificar estado de la organización
@@ -174,7 +175,16 @@ export async function getCurrentUser(): ActionResult {
     const cs = await cookies()
     const headers = new Headers({ cookie: cs.toString() })
     const { user } = await payload.auth({ headers })
-    return { success: true, data: user ?? null }
+    if (!user) return { success: true, data: null }
+
+    // Cargar usuario con depth 2 para obtener organización completa {id, name, status}
+    const fullUser = await payload.findByID({
+      collection: 'users',
+      id: user.id as number,
+      overrideAccess: true,
+      depth: 2,
+    })
+    return { success: true, data: fullUser ?? null }
   } catch (e: unknown) {
     return { success: false, error: (e as Error).message }
   }
