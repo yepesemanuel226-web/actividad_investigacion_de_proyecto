@@ -80,8 +80,8 @@ export async function registerUser({
   // ── Input validation ──────────────────────────────────────────────────────
   if (!orgName?.trim() || orgName.trim().length < 2)
     return { success: false, error: 'Nombre de organización inválido (mínimo 2 caracteres)' }
-  if (!nit?.trim() || !/^[\d.\-]+$/.test(nit.trim()))
-    return { success: false, error: 'NIT inválido (solo dígitos, puntos y guiones)' }
+  if (!nit?.trim() || nit.trim().length < 3)
+    return { success: false, error: 'NIT inválido (mínimo 3 caracteres)' }
   if (!email?.includes('@') || email.length < 5)
     return { success: false, error: 'Correo electrónico inválido' }
   if (!password || password.length < 8)
@@ -135,6 +135,12 @@ export async function registerUser({
     const msg = (e as Error).message ?? ''
     if (/unique|nit/i.test(msg)) {
       return { success: false, error: 'Ya existe una organización registrada con ese NIT.' }
+    }
+    if (/email/i.test(msg)) {
+      return { success: false, error: 'Este correo ya está registrado. Intenta con otro o inicia sesión.' }
+    }
+    if (/invalid/i.test(msg)) {
+      return { success: false, error: 'Datos inválidos. Revisa el correo electrónico e inténtalo de nuevo.' }
     }
     return { success: false, error: msg }
   }
@@ -1770,3 +1776,6 @@ export async function inviteUser({
     return { success: false, error: msg }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Auto-transitions
