@@ -294,10 +294,12 @@ export async function getUsers(orgId: string): ActionResult {
   try {
     if (!(await validateOrgAccess(orgId))) return { success: false, error: 'Acceso denegado' }
     const payload = await getPayload({ config })
+    // showHiddenFields: true asegura que el campo email de colecciones auth se incluya
     const result = await payload.find({
       collection: 'users',
       where: { organization: { equals: Number(orgId) } },
-      overrideAccess: false,
+      overrideAccess: true,
+      showHiddenFields: true,
       limit: 200,
     })
     return { success: true, data: result.docs }

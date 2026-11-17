@@ -131,6 +131,8 @@ type IconName =
   | 'menu'
   | 'close'
   | 'logout'
+  | 'eye'
+  | 'eye-off'
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -254,6 +256,19 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
         <path d="M10 4H4v16h6M14 8l4 4-4 4M8 12h10" />
       </>
     ),
+    'eye-off': (
+      <>
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+        <line x1="1" y1="1" x2="23" y2="23" />
+      </>
+    ),
+    eye: (
+      <>
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
   }
   return (
     <svg
@@ -372,6 +387,50 @@ function RoleBadge({ role, size = 'sm' }: { role: string; size?: 'sm' | 'xs' }) 
     ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold'
     : 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold'
   return <span className={`${cls} ${meta.bg}`}>{meta.label}</span>
+}
+
+// ---------------------------------------------------------------------------
+// PasswordField — input de contraseña con toggle ojo
+// ---------------------------------------------------------------------------
+
+function PasswordField({
+  value,
+  onChange,
+  placeholder = '••••••••',
+  required = false,
+  minLength,
+  className = 'field mt-2',
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  required?: boolean
+  minLength?: number
+  className?: string
+}) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative mt-2">
+      <input
+        type={show ? 'text' : 'password'}
+        required={required}
+        minLength={minLength}
+        className={`${className} pr-10 mt-0`}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5B6B5F] hover:text-[#17251B] transition-colors"
+        aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+      >
+        <Icon name={show ? 'eye' : 'eye-off'} size={18} />
+      </button>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -690,13 +749,11 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
                     </label>
                     <label className="block text-sm font-medium">
                       Contraseña
-                      <input
+                      <PasswordField
                         required
-                        type="password"
-                        className="field mt-2"
                         placeholder="Mínimo 8 caracteres"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={setPassword}
                         minLength={8}
                       />
                     </label>
@@ -754,13 +811,11 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
                 </label>
                 <label className="block text-sm font-medium">
                   Contraseña
-                  <input
+                  <PasswordField
                     required
-                    type="password"
-                    className="field mt-2"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={setPassword}
                   />
                 </label>
               </>
@@ -3945,13 +4000,11 @@ function Modal({
               </label>
               <label className="block text-sm font-medium">
                 Contraseña inicial
-                <input
+                <PasswordField
                   required
-                  type="password"
-                  className="field mt-2"
                   placeholder="Mínimo 8 caracteres"
                   value={invitePassword}
-                  onChange={(e) => setInvitePassword(e.target.value)}
+                  onChange={setInvitePassword}
                   minLength={8}
                 />
               </label>
