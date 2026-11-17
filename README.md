@@ -10,7 +10,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss)](https://tailwindcss.com)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](https://vercel.com)
 
-[🌐 Ver aplicación](https://actividad-investigacion-de-proyecto.vercel.app) · [📋 Credenciales de demo](./CREDENCIALES.md)
+[🌐 Ver aplicación](https://actividad-investigacion-de-proyecto.vercel.app) · [📋 Credenciales de demo](./CREDENCIALES.md) · [🎥 Video demo](https://youtu.be/mDhosmw_lXw) · [📁 Drive entrega](https://drive.google.com/drive/folders/1T69LbW4wzNQ5PjYQke_o4hxmi-VCZbgr?hl=es)
 
 </div>
 
