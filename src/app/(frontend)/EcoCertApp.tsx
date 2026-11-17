@@ -414,12 +414,6 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
       let result: { success: boolean; data?: unknown; error?: string }
       if (showRegister) {
         result = await registerUser({ orgName, nit, sector, name, email, password, role })
-        // Registro exitoso pero org pendiente de aprobación
-        if (result.success && (result.data as { pending?: boolean })?.pending) {
-          const d = result.data as { orgName: string; email: string }
-          setPendingApproval({ orgName: d.orgName, email: d.email })
-          return
-        }
       } else {
         result = await loginUser(email, password)
         // Login bloqueado porque la org está pendiente
@@ -487,60 +481,6 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
             <button
               className="mt-6 w-full text-center text-sm font-medium text-[#2F6B3F]"
               onClick={() => { setSuspended(null); setEmail(''); setPassword(''); setError('') }}
-            >
-              ← Volver al inicio de sesión
-            </button>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  // ── Pantalla: organización pendiente de aprobación ────────────────────
-  if (pendingApproval) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-[#F2F6F1] p-6">
-        <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl bg-[#2F6B3F] text-white">
-              <Icon name="leaf" />
-            </div>
-            <span className="text-xl font-semibold">EcoCert 360</span>
-          </div>
-          <div className="card p-8 text-center">
-            {/* Ícono de reloj animado */}
-            <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-[#FBEBCB]">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#A86A00" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-            <h2 className="text-2xl font-semibold text-[#17251B]">Solicitud en revisión</h2>
-            <p className="mt-3 text-[#5B6B5F] leading-6">
-              Tu solicitud para registrar{' '}
-              <strong className="text-[#17251B]">{pendingApproval.orgName}</strong>{' '}
-              fue recibida correctamente.
-            </p>
-            <div className="mt-5 rounded-lg bg-[#F2F6F1] px-4 py-3 text-left">
-              <p className="text-xs font-semibold text-[#5B6B5F] uppercase tracking-wide mb-2">¿Qué pasa ahora?</p>
-              <div className="space-y-2 text-sm text-[#5B6B5F]">
-                <div className="flex items-start gap-2">
-                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">1</span>
-                  <span>Un administrador revisará los datos de tu organización.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">2</span>
-                  <span>Al aprobarla, podrás iniciar sesión con <strong>{pendingApproval.email}</strong>.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">3</span>
-                  <span>El proceso suele tomar menos de 24 horas hábiles.</span>
-                </div>
-              </div>
-            </div>
-            <button
-              className="mt-6 w-full text-center text-sm font-medium text-[#2F6B3F]"
-              onClick={() => { setPendingApproval(null); setShowRegister(false); setEmail(''); setPassword('') }}
             >
               ← Volver al inicio de sesión
             </button>

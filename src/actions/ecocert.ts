@@ -109,8 +109,9 @@ export async function registerUser({
         name: orgName,
         nit,
         sector,
-        status: 'pending',
+        status: 'active',
         requestedAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
       },
       overrideAccess: true,
     })
@@ -128,12 +129,8 @@ export async function registerUser({
       overrideAccess: true,
     })
 
-    // No iniciar sesión automáticamente: la org está pendiente de aprobación.
-    // Retornamos un resultado especial para que la UI muestre la pantalla de espera.
-    return {
-      success: true,
-      data: { pending: true, orgName, email },
-    }
+    // Org activa directamente — iniciar sesión automáticamente
+    return loginUser(email, password)
   } catch (e: unknown) {
     const msg = (e as Error).message ?? ''
     if (/unique|nit/i.test(msg)) {
