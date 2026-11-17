@@ -4380,11 +4380,15 @@ export default function EcoCertApp() {
   const handleLogin = (user: AppUser) => {
     setCurrentUser(user)
     setLoggedIn(true)
+    // Guardar en localStorage para que persista entre recargas
+    try { localStorage.setItem('ecocert_user', JSON.stringify(user)) } catch {}
   }
 
   const handleLogout = () => {
     setCurrentUser(null)
     setLoggedIn(false)
+    // Limpiar localStorage al cerrar sesión
+    try { localStorage.removeItem('ecocert_user') } catch {}
   }
 
   if (!loggedIn) {
