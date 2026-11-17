@@ -317,9 +317,9 @@ export async function GET() {
 
     // ── 10. Capacitaciones ────────────────────────────────────────────────
     const trainingsData = [
-      { topic: 'Manejo integral de residuos sólidos',  date: addDays(-15), result: 92, competent: 'sí' },
-      { topic: 'Respuesta a emergencias ambientales',  date: addDays(-25), result: 86, competent: 'sí' },
-      { topic: 'ISO 14001:2015 — Fundamentos',         date: addDays(-40), result: 78, competent: 'no' },
+      { topic: 'Manejo integral de residuos sólidos',  date: addDays(-15), result: 92, competent: 'Sí' },
+      { topic: 'Respuesta a emergencias ambientales',  date: addDays(-25), result: 86, competent: 'Sí' },
+      { topic: 'ISO 14001:2015 — Fundamentos',         date: addDays(-40), result: 78, competent: 'No' },
     ]
 
     if (envManager) {
