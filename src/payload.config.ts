@@ -1,6 +1,6 @@
 import path from 'path'
 import { buildConfig } from 'payload'
-import { sqliteAdapter } from '@payloadcms/db-sqlite'
+import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { es as adminLanguage } from '@payloadcms/translations/languages/es'
 import { fileURLToPath } from 'url'
@@ -26,9 +26,9 @@ export default buildConfig({
     supportedLanguages: { es: adminLanguage },
   },
   collections: [Admins, Media, Folders, Tags, ...ecoCertCollections],
-  db: sqliteAdapter({
-    client: {
-      url: process.env.DATABASE_URL || 'file:./ecocert.db',
+  db: postgresAdapter({
+    pool: {
+      connectionString: process.env.DATABASE_URL,
     },
   }),
   secret: process.env.PAYLOAD_SECRET || 'ecocert-360-dev-secret-change-in-prod',

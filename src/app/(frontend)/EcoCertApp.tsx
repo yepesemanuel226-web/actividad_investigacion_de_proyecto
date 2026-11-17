@@ -5,25 +5,45 @@ import {
   loginUser,
   registerUser,
   getCurrentUser,
+  checkOrgStatus,
   getAspects,
   createAspect,
+  getAspectById,
   getLegalRequirements,
   createLegalRequirement,
+  updateLegalRequirement,
   getObjectives,
   createObjective,
+  updateObjective,
+  addObjectiveProgress,
+  getObjectiveById,
+  getObjectiveProgress,
   getAudits,
   createAudit,
+  getAuditById,
+  addFindingToAudit,
+  updateAudit,
   getNonConformities,
+  getNonConformityById,
+  updateNonConformity,
+  getAuditLogForRecord,
   getIncidents,
   createIncident,
   getTrainings,
+  getMyTrainings,
   createTraining,
   getEvidences,
+  getMyEvidences,
   createEvidence,
+  reviewEvidence,
   getNotifications,
   markNotificationRead,
   getUsers,
   createNotification,
+  getParameters,
+  saveParameters,
+  checkAndApplyAutoTransitions,
+  inviteUser,
 } from '@/actions/ecocert'
 
 // ---------------------------------------------------------------------------
@@ -310,8 +330,48 @@ function Badge({ children }: { children: string }) {
 // Skeleton
 // ---------------------------------------------------------------------------
 
-function Skeleton() {
-  return <div className="animate-pulse h-8 w-16 rounded bg-gray-200" />
+function Skeleton({ inline = false }: { inline?: boolean }) {
+  const cls = 'animate-pulse h-5 w-16 rounded bg-gray-200'
+  return inline ? (
+    <span className={cls + ' inline-block'} />
+  ) : (
+    <div className={'h-8 ' + cls} />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Role inference & badge
+// ---------------------------------------------------------------------------
+
+type RoleInference = { role: string; label: string; canOverride: boolean }
+
+const PERSONAL_DOMAINS = new Set([
+  'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com',
+  'yahoo.es', 'icloud.com', 'live.com', 'msn.com',
+])
+
+function inferRole(email: string): RoleInference {
+  const domain = email.split('@')[1]?.toLowerCase() ?? ''
+  const isPersonal = PERSONAL_DOMAINS.has(domain) || domain.includes('.edu')
+  if (isPersonal) return { role: 'collaborator', label: 'Colaborador', canOverride: false }
+  return { role: 'environmental_manager', label: 'Resp. ambiental', canOverride: true }
+}
+
+const ROLE_BADGE_META: Record<string, { bg: string; label: string }> = {
+  administrator:        { bg: 'bg-[#183D27] text-white',      label: 'Administrador' },
+  senior_management:    { bg: 'bg-[#1F5F8B] text-white',      label: 'Alta dirección' },
+  environmental_manager:{ bg: 'bg-[#2F6B3F] text-white',      label: 'Resp. ambiental' },
+  auditor:              { bg: 'bg-[#A86A00] text-white',       label: 'Auditor' },
+  collaborator:         { bg: 'bg-[#6B7280] text-white',       label: 'Colaborador' },
+  supplier:             { bg: 'bg-[#1F5F8B]/80 text-white',    label: 'Proveedor' },
+}
+
+function RoleBadge({ role, size = 'sm' }: { role: string; size?: 'sm' | 'xs' }) {
+  const meta = ROLE_BADGE_META[role] ?? ROLE_BADGE_META['collaborator']
+  const cls = size === 'xs'
+    ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold'
+    : 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold'
+  return <span className={`${cls} ${meta.bg}`}>{meta.label}</span>
 }
 
 // ---------------------------------------------------------------------------
@@ -320,14 +380,32 @@ function Skeleton() {
 
 function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
   const [showRegister, setShowRegister] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [orgName, setOrgName] = useState('')
   const [nit, setNit] = useState('')
   const [sector, setSector] = useState('')
   const [name, setName] = useState('')
+  const [role, setRole] = useState('environmental_manager')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
+  // Política de datos
+  const [acceptedPolicy, setAcceptedPolicy] = useState(false)
+  const [showPolicy, setShowPolicy] = useState(false)
+  // Estado de aprobación pendiente
+  const [pendingApproval, setPendingApproval] = useState<{ orgName: string; email: string } | null>(null)
+  // Estado de org suspendida
+  const [suspended, setSuspended] = useState<{ email: string } | null>(null)
+
+  // Inferir rol desde el dominio del correo cada vez que cambia
+  const inferred = inferRole(email)
+  useEffect(() => {
+    if (showRegister) setRole(inferred.role)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, showRegister])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -335,9 +413,26 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
     startTransition(async () => {
       let result: { success: boolean; data?: unknown; error?: string }
       if (showRegister) {
-        result = await registerUser({ orgName, nit, sector, name, email, password })
+        result = await registerUser({ orgName, nit, sector, name, email, password, role })
+        // Registro exitoso pero org pendiente de aprobación
+        if (result.success && (result.data as { pending?: boolean })?.pending) {
+          const d = result.data as { orgName: string; email: string }
+          setPendingApproval({ orgName: d.orgName, email: d.email })
+          return
+        }
       } else {
         result = await loginUser(email, password)
+        // Login bloqueado porque la org está pendiente
+        if (!result.success && result.error === 'pending') {
+          const d = result.data as { orgName: string } | undefined
+          setPendingApproval({ orgName: d?.orgName ?? '', email })
+          return
+        }
+        // Login bloqueado porque la org está suspendida
+        if (!result.success && result.error?.includes('suspendida')) {
+          setSuspended({ email })
+          return
+        }
       }
       if (result.success && result.data) {
         const u = result.data as {
@@ -365,7 +460,179 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
     })
   }
 
+  // ── Pantalla: organización suspendida ─────────────────────────────────
+  if (suspended) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#F2F6F1] p-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-xl bg-[#2F6B3F] text-white">
+              <Icon name="leaf" />
+            </div>
+            <span className="text-xl font-semibold">EcoCert 360</span>
+          </div>
+          <div className="card p-8 text-center">
+            <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-[#F8DAD4]">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#A8321F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-semibold text-[#17251B]">Organización suspendida</h2>
+            <p className="mt-3 text-[#5B6B5F] leading-6">
+              La cuenta <strong className="text-[#17251B]">{suspended.email}</strong> pertenece a una organización que ha sido suspendida y no puede acceder a la plataforma.
+            </p>
+            <div className="mt-5 rounded-lg bg-[#F8DAD4] px-4 py-3 text-sm text-[#A8321F]">
+              Para reactivar tu organización, contacta al equipo de soporte de EcoCert 360.
+            </div>
+            <button
+              className="mt-6 w-full text-center text-sm font-medium text-[#2F6B3F]"
+              onClick={() => { setSuspended(null); setEmail(''); setPassword(''); setError('') }}
+            >
+              ← Volver al inicio de sesión
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // ── Pantalla: organización pendiente de aprobación ────────────────────
+  if (pendingApproval) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#F2F6F1] p-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-xl bg-[#2F6B3F] text-white">
+              <Icon name="leaf" />
+            </div>
+            <span className="text-xl font-semibold">EcoCert 360</span>
+          </div>
+          <div className="card p-8 text-center">
+            {/* Ícono de reloj animado */}
+            <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-[#FBEBCB]">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#A86A00" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-semibold text-[#17251B]">Solicitud en revisión</h2>
+            <p className="mt-3 text-[#5B6B5F] leading-6">
+              Tu solicitud para registrar{' '}
+              <strong className="text-[#17251B]">{pendingApproval.orgName}</strong>{' '}
+              fue recibida correctamente.
+            </p>
+            <div className="mt-5 rounded-lg bg-[#F2F6F1] px-4 py-3 text-left">
+              <p className="text-xs font-semibold text-[#5B6B5F] uppercase tracking-wide mb-2">¿Qué pasa ahora?</p>
+              <div className="space-y-2 text-sm text-[#5B6B5F]">
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">1</span>
+                  <span>Un administrador revisará los datos de tu organización.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">2</span>
+                  <span>Al aprobarla, podrás iniciar sesión con <strong>{pendingApproval.email}</strong>.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 size-5 shrink-0 rounded-full bg-[#DDEBDD] text-[#2F6B3F] text-xs grid place-items-center font-bold">3</span>
+                  <span>El proceso suele tomar menos de 24 horas hábiles.</span>
+                </div>
+              </div>
+            </div>
+            <button
+              className="mt-6 w-full text-center text-sm font-medium text-[#2F6B3F]"
+              onClick={() => { setPendingApproval(null); setShowRegister(false); setEmail(''); setPassword('') }}
+            >
+              ← Volver al inicio de sesión
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // ── Pantalla recuperar contraseña ──────────────────────────────────────
+  if (showForgot) {
+    const handleForgot = (e: React.FormEvent) => {
+      e.preventDefault()
+      // Payload expone POST /api/users/forgot-password
+      fetch('/api/users/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+        .then((res) => {
+          // Siempre mostrar éxito (404 incluido) para no revelar si el correo existe
+          if (res.ok || res.status === 404) {
+            setForgotSent(true)
+          } else {
+            setError('No se pudo enviar el correo. Intenta de nuevo.')
+          }
+        })
+        .catch(() => setError('Error de red. Verifica tu conexión e intenta de nuevo.'))
+    }
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#F2F6F1] p-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-xl bg-[#2F6B3F] text-white">
+              <Icon name="leaf" />
+            </div>
+            <span className="text-xl font-semibold">EcoCert 360</span>
+          </div>
+          {forgotSent ? (
+            <div className="card p-8 text-center">
+              <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-[#DDEBDD] text-[#2F6B3F]">
+                <Icon name="check" size={28} />
+              </div>
+              <h2 className="text-2xl font-semibold">Revisa tu correo</h2>
+              <p className="mt-3 text-[#5B6B5F]">
+                Si existe una cuenta con <strong>{forgotEmail}</strong>, recibirás un enlace para
+                restablecer tu contraseña.
+              </p>
+              <button
+                className="primary-btn mt-8 w-full justify-center"
+                onClick={() => { setShowForgot(false); setForgotSent(false) }}
+              >
+                Volver al inicio de sesión
+              </button>
+            </div>
+          ) : (
+            <div className="card p-8">
+              <h2 className="text-2xl font-semibold">Recuperar contraseña</h2>
+              <p className="mt-2 text-sm text-[#5B6B5F]">
+                Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
+              </p>
+              <form className="mt-6 space-y-4" onSubmit={handleForgot}>
+                <label className="block text-sm font-medium">
+                  Correo electrónico
+                  <input
+                    required
+                    type="email"
+                    className="field mt-2"
+                    placeholder="nombre@empresa.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#2F6B3F] font-semibold text-white transition hover:bg-[#245431]">
+                  Enviar enlace <Icon name="arrow" size={17} />
+                </button>
+              </form>
+              <button
+                className="mt-5 w-full text-center text-sm font-medium text-[#2F6B3F]"
+                onClick={() => setShowForgot(false)}
+              >
+                ← Volver al inicio de sesión
+              </button>
+            </div>
+          )}
+        </div>
+      </main>
+    )
+  }
+
   return (
+  <>
     <main className="grid min-h-screen bg-[#F2F6F1] lg:grid-cols-[1.08fr_.92fr]">
       <section className="relative hidden overflow-hidden bg-[#214E31] p-14 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:28px_28px]" />
@@ -409,78 +676,165 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             {showRegister && (
               <>
+                {/* Campo de correo primero — el indicador de rol aparece al escribir */}
+                <div>
+                  <label className="block text-sm font-medium">
+                    Correo electrónico
+                    <input
+                      required
+                      type="email"
+                      className="field mt-2"
+                      placeholder="nombre@empresa.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoFocus
+                    />
+                  </label>
+
+                  {/* Indicador dinámico según el dominio */}
+                  {!email.includes('@') ? (
+                    /* Hint inicial: tipos de correo */
+                    <div className="mt-2 rounded-lg border border-dashed border-[#CBD8CB] bg-white px-3 py-2.5">
+                      <p className="text-xs font-medium text-[#5B6B5F] mb-1.5">¿Qué correo usar?</p>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] text-[#5B6B5F]">
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2 rounded-full bg-[#2F6B3F] shrink-0" />
+                          <span><strong>@empresa.com / .co</strong> → crea organización</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2 rounded-full bg-[#A86A00] shrink-0" />
+                          <span><strong>@gmail / @hotmail / @outlook</strong> → solo por invitación</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : !inferred.canOverride ? (
+                    /* Correo personal — bloquear */
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2.8 19h18.4L12 3Z"/><path d="M12 9v4M12 17h.01"/></svg>
+                        <span className="text-xs font-semibold text-amber-800">Correo personal · Solo por invitación</span>
+                      </div>
+                      <p className="text-[11px] text-amber-700 leading-4">
+                        Con <strong>@gmail, @hotmail, @outlook</strong> y similares no puedes crear una organización nueva. Pide a tu administrador que te invite, o usa el correo corporativo de tu empresa.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Correo corporativo — mostrar rol asignado */
+                    <div className="mt-2 rounded-lg border border-[#DDEBDD] bg-[#F4FAF4] px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2F6B3F" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
+                          <span className="text-xs font-semibold text-[#2F6B3F]">Correo corporativo detectado</span>
+                        </div>
+                        <RoleBadge role="environmental_manager" />
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#5B6B5F] leading-4">
+                        Serás <strong>Responsable Ambiental</strong> de tu organización. Los roles Administrador y Alta Dirección se asignan desde el panel de administración.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Resto del formulario solo para correos corporativos */}
+                {email.includes('@') && inferred.canOverride && (
+                  <>
+                    <label className="block text-sm font-medium">
+                      Nombre completo
+                      <input
+                        required
+                        className="field mt-2"
+                        placeholder="Tu nombre"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-sm font-medium">
+                      Contraseña
+                      <input
+                        required
+                        type="password"
+                        className="field mt-2"
+                        placeholder="Mínimo 8 caracteres"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={8}
+                      />
+                    </label>
+                    <div className="rounded-lg border border-[#CBD8CB] bg-[#F8FAF8] p-4 space-y-4">
+                      <p className="text-sm font-semibold text-[#17251B]">Datos de tu organización</p>
+                      <label className="block text-sm font-medium">
+                        Nombre de la organización
+                        <input
+                          required
+                          className="field mt-2"
+                          placeholder="EcoVerde S.A.S."
+                          value={orgName}
+                          onChange={(e) => setOrgName(e.target.value)}
+                        />
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block text-sm font-medium">
+                          NIT
+                          <input
+                            required
+                            className="field mt-2"
+                            placeholder="900.123.456-7"
+                            value={nit}
+                            onChange={(e) => setNit(e.target.value)}
+                          />
+                        </label>
+                        <label className="block text-sm font-medium">
+                          Sector
+                          <input
+                            required
+                            className="field mt-2"
+                            placeholder="Manufactura"
+                            value={sector}
+                            onChange={(e) => setSector(e.target.value)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {!showRegister && (
+              <>
                 <label className="block text-sm font-medium">
-                  Organización
+                  Correo electrónico
                   <input
                     required
+                    type="email"
                     className="field mt-2"
-                    placeholder="Nombre de la organización"
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
+                    placeholder="nombre@empresa.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block text-sm font-medium">
-                    NIT
-                    <input
-                      required
-                      className="field mt-2"
-                      placeholder="900.123.456-7"
-                      value={nit}
-                      onChange={(e) => setNit(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-sm font-medium">
-                    Sector
-                    <input
-                      required
-                      className="field mt-2"
-                      placeholder="Manufactura"
-                      value={sector}
-                      onChange={(e) => setSector(e.target.value)}
-                    />
-                  </label>
-                </div>
                 <label className="block text-sm font-medium">
-                  Nombre completo
+                  Contraseña
                   <input
                     required
+                    type="password"
                     className="field mt-2"
-                    placeholder="Tu nombre"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                   />
                 </label>
               </>
             )}
-            <label className="block text-sm font-medium">
-              Correo electrónico
-              <input
-                required
-                type="email"
-                className="field mt-2"
-                placeholder="nombre@empresa.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              Contraseña
-              <input
-                required
-                type="password"
-                className="field mt-2"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
             {!showRegister && (
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 text-[#5B6B5F]">
                   <input type="checkbox" className="accent-[#2F6B3F]" /> Recordarme
                 </label>
-                <button type="button" className="font-medium text-[#2F6B3F]">
+                <button
+                  type="button"
+                  className="font-medium text-[#2F6B3F]"
+                  onClick={() => { setShowForgot(true); setError('') }}
+                >
                   ¿Olvidaste tu contraseña?
                 </button>
               </div>
@@ -490,9 +844,35 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
                 {error}
               </p>
             )}
+            {showRegister && email.includes('@') && inferred.canOverride && (
+              <div className="flex items-start gap-3">
+                <input
+                  id="policy-cb"
+                  type="checkbox"
+                  className="mt-0.5 accent-[#2F6B3F] shrink-0 size-4"
+                  checked={acceptedPolicy}
+                  onChange={(e) => setAcceptedPolicy(e.target.checked)}
+                />
+                <label htmlFor="policy-cb" className="text-sm text-[#5B6B5F] leading-5 cursor-pointer">
+                  He leído y acepto la{' '}
+                  <button
+                    type="button"
+                    className="font-semibold text-[#2F6B3F] underline"
+                    onClick={() => setShowPolicy(true)}
+                  >
+                    política de tratamiento de datos personales
+                  </button>
+                  .
+                </label>
+              </div>
+            )}
             <button
               type="submit"
-              disabled={isPending}
+              disabled={
+                isPending ||
+                (showRegister && email.includes('@') && !inferred.canOverride) ||
+                (showRegister && email.includes('@') && inferred.canOverride && !acceptedPolicy)
+              }
               className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#2F6B3F] font-semibold text-white transition hover:bg-[#245431] disabled:opacity-60"
             >
               {isPending ? 'Procesando...' : showRegister ? 'Crear organización' : 'Ingresar'}{' '}
@@ -503,17 +883,73 @@ function Login({ onLogin }: { onLogin: (user: AppUser) => void }) {
             {showRegister ? '¿Ya tienes una cuenta?' : '¿Aún no tienes una cuenta?'}{' '}
             <button
               className="font-semibold text-[#2F6B3F]"
-              onClick={() => setShowRegister(!showRegister)}
+              onClick={() => { setShowRegister(!showRegister); setAcceptedPolicy(false); setError('') }}
             >
               {showRegister ? 'Inicia sesión' : 'Regístrate'}
             </button>
           </p>
-          <div className="mt-7 rounded-lg border border-[#CBD8CB] bg-white px-4 py-3 text-center text-xs text-[#5B6B5F]">
-            Modo demostración: usa cualquier correo y contraseña para explorar la plataforma.
-          </div>
+
         </div>
       </section>
     </main>
+
+    {/* Modal política de datos */}
+    {showPolicy && (
+      <div
+        className="fixed inset-0 z-50 grid place-items-center bg-[#122117]/55 p-4 backdrop-blur-sm"
+        onMouseDown={() => setShowPolicy(false)}
+      >
+        <div
+          className="max-h-[85vh] w-full max-w-lg overflow-auto rounded-xl bg-white shadow-2xl"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="sticky top-0 flex items-center justify-between border-b border-[#E1E8E1] bg-white p-6">
+            <h2 className="text-lg font-semibold">Política de tratamiento de datos personales</h2>
+            <button
+              type="button"
+              onClick={() => setShowPolicy(false)}
+              className="grid size-8 place-items-center rounded-lg hover:bg-[#EDF2ED] text-[#5B6B5F]"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <div className="space-y-4 p-6 text-sm text-[#5B6B5F] leading-6">
+            <p>
+              En cumplimiento de la <strong className="text-[#17251B]">Ley 1581 de 2012</strong> y el
+              Decreto 1377 de 2013, <strong className="text-[#17251B]">EcoCert 360</strong> informa
+              que los datos personales suministrados durante el registro serán tratados exclusivamente
+              para gestionar la cuenta de usuario, brindar los servicios de la plataforma y cumplir
+              con obligaciones legales.
+            </p>
+            <p>
+              Los datos recopilados incluyen nombre, correo electrónico, NIT de la organización y
+              sector económico. No serán cedidos a terceros sin su consentimiento previo, salvo
+              obligación legal.
+            </p>
+            <p>
+              Tienes derecho a conocer, actualizar, rectificar y suprimir tus datos personales.
+              Para ejercer estos derechos, escribe a{' '}
+              <strong className="text-[#17251B]">datos@ecocert360.co</strong>.
+            </p>
+            <p>
+              Los datos se almacenan en servidores seguros con cifrado en tránsito y en reposo.
+              Al desactivar la cuenta, se eliminan en un plazo de 30 días hábiles.
+            </p>
+          </div>
+          <div className="border-t border-[#E1E8E1] p-6">
+            <button
+              type="button"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2F6B3F] font-semibold text-white transition hover:bg-[#245431]"
+              onClick={() => { setAcceptedPolicy(true); setShowPolicy(false) }}
+            >
+              <Icon name="check" size={17} />
+              Acepto la política
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
 
@@ -558,7 +994,9 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
   const [aspectCount, setAspectCount] = useState(0)
   const [objectiveCount, setObjectiveCount] = useState(0)
   const [ncCount, setNcCount] = useState(0)
+  const [ncByStatus, setNcByStatus] = useState<Record<string, number>>({})
   const [expiringCount, setExpiringCount] = useState(0)
+  const [legalStats, setLegalStats] = useState({ cumple: 0, noCumple: 0, sinEvaluar: 0, total: 0 })
   const [unreadCount, setUnreadCount] = useState(0)
   const [objectives, setObjectives] = useState<
     { title: string; progress: number; amount: string; status: string }[]
@@ -614,6 +1052,13 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
             return s && !['Cerrada'].includes(s)
           }).length,
         )
+        // Conteo por estado para el gráfico del Dashboard
+        const counts: Record<string, number> = {}
+        ncDocs.forEach((d: unknown) => {
+          const s = (d as { status?: string }).status ?? 'Desconocido'
+          counts[s] = (counts[s] ?? 0) + 1
+        })
+        setNcByStatus(counts)
 
         const legalDocs = (legalRes.data as unknown[]) ?? []
         const now = Date.now()
@@ -626,9 +1071,16 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
             return diff > 0 && diff <= thirtyDays
           }).length,
         )
+        const cumple = legalDocs.filter((d: unknown) => (d as { compliance?: string }).compliance === 'Cumple').length
+        const noCumple = legalDocs.filter((d: unknown) => (d as { compliance?: string }).compliance === 'No cumple').length
+        const sinEvaluar = legalDocs.filter((d: unknown) => (d as { compliance?: string }).compliance === 'Sin evaluar').length
+        setLegalStats({ cumple, noCumple, sinEvaluar, total: legalDocs.length })
 
         const notifDocs = (notifsRes.data as unknown[]) ?? []
         setUnreadCount(notifDocs.filter((d: unknown) => !(d as { read?: boolean }).read).length)
+
+        // RN-07, RN-10, RN-03: aplicar transiciones automáticas en background
+        checkAndApplyAutoTransitions(orgId).catch(() => {})
       } finally {
         setLoading(false)
       }
@@ -688,7 +1140,7 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
               <Icon name="arrow" size={16} />
             </div>
             <p className="mt-5 text-3xl font-semibold tracking-tight">
-              {k.value === null ? <Skeleton /> : k.value}
+              {k.value === null ? <Skeleton inline /> : k.value}
             </p>
             <p className="mt-1 text-sm font-medium">{k.label}</p>
             <p className="mt-2 text-xs text-[#5B6B5F]">{k.change}</p>
@@ -741,21 +1193,28 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
           <h2 className="section-title">No conformidades</h2>
           <p className="mt-1 text-sm text-[#5B6B5F]">Distribución por estado</p>
           <div className="mt-7 flex items-end justify-around gap-3 border-b border-[#DDE5DD] pb-2">
-            {[
-              ['Detectada', 35, '#DCA444'],
-              ['Análisis', 58, '#5A8DB2'],
-              ['Ejecución', 78, '#2F6B3F'],
-              ['Vencida', 28, '#B94B39'],
-            ].map(([l, h, c]) => (
-              <div key={l as string} className="flex flex-1 flex-col items-center gap-2">
-                <span className="text-xs font-semibold">{Math.round(Number(h) / 20)}</span>
-                <div
-                  className="w-full max-w-11 rounded-t-md"
-                  style={{ height: h, backgroundColor: c as string }}
-                />
-                <span className="text-[10px] text-[#5B6B5F]">{l}</span>
-              </div>
-            ))}
+            {Object.keys(ncByStatus).length === 0 ? (
+              <p className="py-6 text-sm text-[#5B6B5F]">Sin datos aún.</p>
+            ) : (
+              (['Detectada', 'En análisis', 'En ejecución', 'Vencida', 'Escalada'] as const)
+                .filter(s => ncByStatus[s])
+                .map(s => {
+                  const count = ncByStatus[s] ?? 0
+                  const maxCount = Math.max(...Object.values(ncByStatus))
+                  const heightPx = Math.round((count / maxCount) * 60) + 10
+                  const colors: Record<string, string> = {
+                    Detectada: '#DCA444', 'En análisis': '#5A8DB2',
+                    'En ejecución': '#2F6B3F', Vencida: '#B94B39', Escalada: '#B94B39',
+                  }
+                  return (
+                    <div key={s} className="flex flex-1 flex-col items-center gap-2">
+                      <span className="text-xs font-semibold">{count}</span>
+                      <div className="w-full max-w-11 rounded-t-md" style={{ height: heightPx, backgroundColor: colors[s] }} />
+                      <span className="text-[10px] text-[#5B6B5F]">{s.replace('En ', '')}</span>
+                    </div>
+                  )
+                })
+            )}
           </div>
           <button
             onClick={() => go('conformidades')}
@@ -787,21 +1246,27 @@ function Dashboard({ go }: { go: (p: PageId) => void }) {
         <section className="card p-6">
           <div className="flex justify-between">
             <h2 className="section-title">Cumplimiento legal</h2>
+            <span className="text-sm font-semibold text-[#2F6B3F]">
+              {legalStats.total > 0 ? `${Math.round((legalStats.cumple / legalStats.total) * 100)}%` : '—'}
+            </span>
           </div>
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-[#ECEFF1]">
-            <div className="h-full w-[87%] bg-[#2F6B3F]" />
+            <div
+              className="h-full bg-[#2F6B3F] rounded-full transition-all"
+              style={{ width: legalStats.total > 0 ? `${Math.round((legalStats.cumple / legalStats.total) * 100)}%` : '0%' }}
+            />
           </div>
           <div className="mt-6 grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-xl font-semibold">—</p>
+              <p className="text-xl font-semibold">{legalStats.cumple}</p>
               <p className="text-xs text-[#5B6B5F]">Cumplen</p>
             </div>
             <div>
-              <p className="text-xl font-semibold text-[#A8321F]">—</p>
+              <p className="text-xl font-semibold text-[#A8321F]">{legalStats.noCumple}</p>
               <p className="text-xs text-[#5B6B5F]">No cumplen</p>
             </div>
             <div>
-              <p className="text-xl font-semibold text-[#6B7280]">—</p>
+              <p className="text-xl font-semibold text-[#6B7280]">{legalStats.sinEvaluar}</p>
               <p className="text-xs text-[#5B6B5F]">Sin evaluar</p>
             </div>
           </div>
@@ -823,18 +1288,57 @@ type TableConfig = {
   rows: string[][]
 }
 
+// ---------------------------------------------------------------------------
+// EmptyState — estado vacío reutilizable con ícono, texto y botón de acción
+// ---------------------------------------------------------------------------
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  onAction,
+}: {
+  icon: IconName
+  title: string
+  description: string
+  action?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-4 grid size-16 place-items-center rounded-full bg-[#F2F6F1] text-[#5B6B5F]">
+        <Icon name={icon} size={28} />
+      </div>
+      <h3 className="text-base font-semibold text-[#17251B]">{title}</h3>
+      <p className="mt-1 max-w-xs text-sm text-[#5B6B5F]">{description}</p>
+      {action && onAction && (
+        <button onClick={onAction} className="primary-btn mt-5">
+          <Icon name="plus" size={16} />
+          {action}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function TablePage({
   page,
   onAdd,
   refreshKey,
+  onRowClick,
 }: {
   page: PageId
   onAdd: () => void
   refreshKey?: number
+  onRowClick?: (id: string) => void
 }) {
   const { currentUser, organizationId } = useContext(AppContext)
   const [rows, setRows] = useState<string[][]>([])
+  const [rowIds, setRowIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('Todos')
 
   const fetchRows = useCallback(async () => {
     if (!organizationId) return
@@ -863,6 +1367,7 @@ function TablePage({
             ]
           }),
         )
+        setRowIds(((res.data as unknown[]) ?? []).map((d: unknown) => String((d as { id?: string | number }).id ?? '')))
       } else if (page === 'legales') {
         const res = await getLegalRequirements(organizationId)
         const docs = (res.data as unknown[]) ?? []
@@ -884,31 +1389,7 @@ function TablePage({
             ]
           }),
         )
-        // RN-03: notify current user about documents expiring within 7, 15, or 30 days
-        if (currentUser?.id) {
-          const now = Date.now()
-          const thresholds = [
-            { days: 7, label: '7 días' },
-            { days: 15, label: '15 días' },
-            { days: 30, label: '30 días' },
-          ]
-          for (const doc of docs) {
-            const d = doc as { id?: string | number; title?: string; nextReview?: string }
-            if (!d.nextReview) continue
-            const diff = new Date(d.nextReview).getTime() - now
-            if (diff <= 0) continue
-            const diffDays = diff / (1000 * 60 * 60 * 24)
-            const threshold = thresholds.find((t) => diffDays <= t.days)
-            if (threshold) {
-              createNotification({
-                userId: currentUser.id,
-                type: 'expiry-warning',
-                message: `El requisito legal "${d.title ?? '—'}" vence en menos de ${threshold.label}.`,
-                reference: d.id ? String(d.id) : undefined,
-              }).catch(() => {/* non-blocking */})
-            }
-          }
-        }
+        setRowIds(((res.data as unknown[]) ?? []).map((d: unknown) => String((d as { id?: string | number }).id ?? '')))
       } else if (page === 'auditorias') {
         const res = await getAudits(organizationId)
         const docs = (res.data as unknown[]) ?? []
@@ -934,6 +1415,7 @@ function TablePage({
             ]
           }),
         )
+        setRowIds(((res.data as unknown[]) ?? []).map((d: unknown) => String((d as { id?: string | number }).id ?? '')))
       } else if (page === 'incidentes') {
         const res = await getIncidents(organizationId)
         const docs = (res.data as unknown[]) ?? []
@@ -958,7 +1440,11 @@ function TablePage({
           }),
         )
       } else if (page === 'capacitacion') {
-        const res = await getTrainings(organizationId)
+        // P21: Colaborador solo ve sus propias capacitaciones
+        const isCollaborator = currentUser?.role === 'collaborator'
+        const res = isCollaborator && currentUser?.id
+          ? await getMyTrainings(organizationId, currentUser.id)
+          : await getTrainings(organizationId)
         const docs = (res.data as unknown[]) ?? []
         setRows(
           docs.map((d: unknown) => {
@@ -983,20 +1469,31 @@ function TablePage({
           }),
         )
       } else if (page === 'evidencias') {
-        const res = await getEvidences(organizationId)
+        // P22: Proveedor solo ve las suyas; Resp. Ambiental/Auditor ven todas
+        const isSupplier = currentUser?.role === 'supplier'
+        const res = isSupplier && currentUser?.id
+          ? await getMyEvidences(organizationId, currentUser.id)
+          : await getEvidences(organizationId)
         const docs = (res.data as unknown[]) ?? []
+        const ids = docs.map((d: unknown) => String((d as { id?: string | number }).id ?? ''))
+        setRowIds(ids)
         setRows(
           docs.map((d: unknown) => {
             const doc = d as {
+              id?: string | number
               description?: string
               sourceTable?: string
               recordId?: string
               statusReview?: string
+              uploadedBy?: { name?: string } | string
             }
+            const uploaderName = typeof doc.uploadedBy === 'object' && doc.uploadedBy !== null
+              ? (doc.uploadedBy as { name?: string }).name ?? '—'
+              : String(doc.uploadedBy ?? '—')
             return [
               doc.description ?? '—',
+              uploaderName,
               doc.sourceTable ?? '—',
-              doc.recordId ?? '—',
               '—',
               doc.statusReview ?? 'Pendiente',
             ]
@@ -1070,9 +1567,9 @@ function TablePage({
     },
     evidencias: {
       title: 'Evidencias de cumplimiento',
-      desc: 'Centraliza soportes de proveedores y requisitos.',
+      desc: currentUser?.role === 'supplier' ? 'Tus evidencias enviadas.' : 'Centraliza soportes de proveedores y requisitos.',
       button: 'Cargar evidencia',
-      headers: ['Descripción', 'Colección', 'Registro', 'Fecha', 'Estado'],
+      headers: ['Descripción', 'Subido por', 'Módulo', 'Fecha', 'Estado'],
       rows,
     },
     usuarios: {
@@ -1091,6 +1588,36 @@ function TablePage({
     currentUser?.role === 'environmental_manager' || currentUser?.role === 'administrator'
   const showAddButton = page !== 'aspectos' || canAddAspect
 
+  // Config de empty states por sección
+  const emptyStates: Record<string, { icon: IconName; title: string; description: string }> = {
+    aspectos:     { icon: 'leaf',      title: 'Sin aspectos registrados',      description: 'Registra las actividades y aspectos ambientales de tu organización para calcular su significancia.' },
+    legales:      { icon: 'scale',     title: 'Sin requisitos legales',         description: 'Agrega los requisitos legales aplicables a tu organización y controla su cumplimiento.' },
+    auditorias:   { icon: 'clipboard', title: 'Sin auditorías programadas',     description: 'Programa auditorías para evaluar el sistema de gestión ambiental.' },
+    incidentes:   { icon: 'alert',     title: 'Sin incidentes registrados',     description: 'Reporta incidentes y emergencias ambientales para darles seguimiento.' },
+    capacitacion: { icon: 'training',  title: 'Sin capacitaciones registradas', description: 'Registra las capacitaciones del equipo y evalúa su competencia ambiental.' },
+    evidencias:   { icon: 'file',      title: 'Sin evidencias cargadas',        description: 'Carga evidencias de cumplimiento de proveedores y requisitos.' },
+    usuarios:     { icon: 'users',     title: 'Sin usuarios registrados',       description: 'Invita usuarios a tu organización y asígnales roles según sus responsabilidades.' },
+  }
+  const emptyState = emptyStates[page]
+
+  // ── Filtrado client-side ──────────────────────────────────────────────
+  const q = searchQuery.trim().toLowerCase()
+  const filteredPairs = c.rows
+    .map((row, i) => ({ row, id: rowIds[i] ?? '', idx: i }))
+    .filter(({ row }) => {
+      // Filtro de texto: cualquier celda contiene el query
+      const matchesText = !q || row.some((cell) => cell.toLowerCase().includes(q))
+      // Filtro de estado: última columna
+      const lastCell = row[row.length - 1] ?? ''
+      const matchesStatus = statusFilter === 'Todos' || lastCell === statusFilter
+      return matchesText && matchesStatus
+    })
+  const filteredRows = filteredPairs.map((p) => p.row)
+  const filteredIds = filteredPairs.map((p) => p.id)
+
+  // Opciones únicas de estado para el selector
+  const statusOptions = ['Todos', ...Array.from(new Set(c.rows.map((r) => r[r.length - 1]).filter(Boolean)))]
+
   return (
     <div>
       <PageHeading
@@ -1108,13 +1635,35 @@ function TablePage({
             <input
               className="h-10 w-full rounded-lg border border-[#CBD8CB] bg-[#F8FAF8] pl-10 pr-3 text-sm outline-none focus:border-[#2F6B3F]"
               placeholder="Buscar en esta sección..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <select className="h-10 rounded-lg border border-[#CBD8CB] bg-white px-3 text-sm">
-            <option>Todos los estados</option>
-            <option>Activos</option>
-            <option>Pendientes</option>
+          <select
+            className="h-10 rounded-lg border border-[#CBD8CB] bg-white px-3 text-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            {statusOptions.map((opt) => (
+              <option key={opt} value={opt}>{opt === 'Todos' ? 'Todos los estados' : opt}</option>
+            ))}
           </select>
+          {filteredRows.length > 0 && (
+            <button
+              onClick={() => {
+                const csvRows = [c.headers, ...filteredRows]
+                const csv = csvRows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+                a.download = `${c.title.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0,10)}.csv`
+                a.click()
+              }}
+              className="secondary-btn shrink-0"
+            >
+              <Icon name="download" size={16} />
+              CSV
+            </button>
+          )}
         </div>
         {loading ? (
           <div className="space-y-3 p-6">
@@ -1137,17 +1686,28 @@ function TablePage({
                   </tr>
                 </thead>
                 <tbody>
-                  {c.rows.length === 0 ? (
+                  {filteredRows.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={c.headers.length + 1}
-                        className="px-5 py-8 text-center text-sm text-[#5B6B5F]"
-                      >
-                        Sin registros.
+                      <td colSpan={c.headers.length + 1}>
+                        {q || statusFilter !== 'Todos' ? (
+                          <p className="px-5 py-8 text-center text-sm text-[#5B6B5F]">
+                            Sin resultados para esta búsqueda.
+                          </p>
+                        ) : emptyState ? (
+                          <EmptyState
+                            icon={emptyState.icon}
+                            title={emptyState.title}
+                            description={emptyState.description}
+                            action={showAddButton ? c.button : undefined}
+                            onAction={showAddButton ? onAdd : undefined}
+                          />
+                        ) : (
+                          <p className="px-5 py-8 text-center text-sm text-[#5B6B5F]">Sin registros.</p>
+                        )}
                       </td>
                     </tr>
                   ) : (
-                    c.rows.map((row, i) => (
+                    filteredRows.map((row, i) => (
                       <tr key={i} className="border-t border-[#E5EBE5] hover:bg-[#F8FAF8]">
                         {row.map((v, j) => (
                           <td key={j} className={`px-5 py-4 ${j === 0 ? 'font-semibold' : ''}`}>
@@ -1167,9 +1727,50 @@ function TablePage({
                           </td>
                         ))}
                         <td className="px-4">
-                          <button className="grid size-8 place-items-center rounded hover:bg-[#E7EEE7]">
-                            <Icon name="arrow" size={16} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {/* P10: Auditor evalúa cumplimiento (RN-04) */}
+                            {page === 'legales' &&
+                              (currentUser?.role === 'auditor' || currentUser?.role === 'administrator') &&
+                              row[row.length - 1] !== 'Cumple' && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    updateLegalRequirement(filteredIds[i] ?? '', { compliance: 'Cumple' }).then(() => fetchRows())
+                                  }}
+                                  className="rounded px-2 py-1 text-xs font-medium text-[#2F6B3F] hover:bg-[#DDEBDD]"
+                                >Cumple</button>
+                                {row[row.length - 1] !== 'No cumple' && (
+                                  <button
+                                    onClick={() => {
+                                      updateLegalRequirement(filteredIds[i] ?? '', { compliance: 'No cumple' }).then(() => fetchRows())
+                                    }}
+                                    className="rounded px-2 py-1 text-xs font-medium text-[#A8321F] hover:bg-[#F8DAD4]"
+                                  >No cumple</button>
+                                )}
+                              </>
+                            )}
+                            {/* P22: Resp. Ambiental aprueba/rechaza evidencias */}
+                            {page === 'evidencias' &&
+                              (currentUser?.role === 'environmental_manager' || currentUser?.role === 'administrator') &&
+                              row[row.length - 1] === 'Pendiente' && (
+                              <>
+                                <button
+                                  onClick={() => { reviewEvidence(filteredIds[i] ?? '', 'Aprobada').then(() => fetchRows()) }}
+                                  className="rounded px-2 py-1 text-xs font-medium text-[#2F6B3F] hover:bg-[#DDEBDD]"
+                                >Aprobar</button>
+                                <button
+                                  onClick={() => { reviewEvidence(filteredIds[i] ?? '', 'Rechazada').then(() => fetchRows()) }}
+                                  className="rounded px-2 py-1 text-xs font-medium text-[#A8321F] hover:bg-[#F8DAD4]"
+                                >Rechazar</button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => onRowClick?.(filteredIds[i] ?? '')}
+                              className="grid size-8 place-items-center rounded hover:bg-[#E7EEE7]"
+                            >
+                              <Icon name="arrow" size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1178,8 +1779,24 @@ function TablePage({
               </table>
             </div>
             <div className="divide-y divide-[#E5EBE5] md:hidden">
-              {c.rows.map((row, i) => (
-                <button key={i} className="block w-full p-4 text-left">
+              {filteredRows.length === 0 ? (
+                <div className="p-4">
+                  {q || statusFilter !== 'Todos' ? (
+                    <p className="py-6 text-center text-sm text-[#5B6B5F]">Sin resultados para esta búsqueda.</p>
+                  ) : emptyState ? (
+                    <EmptyState
+                      icon={emptyState.icon}
+                      title={emptyState.title}
+                      description={emptyState.description}
+                      action={showAddButton ? c.button : undefined}
+                      onAction={showAddButton ? onAdd : undefined}
+                    />
+                  ) : (
+                    <p className="py-6 text-center text-sm text-[#5B6B5F]">Sin registros.</p>
+                  )}
+                </div>
+              ) : filteredRows.map((row, i) => (
+                <button key={i} onClick={() => onRowClick?.(filteredIds[i] ?? '')} className="block w-full p-4 text-left">
                   <div className="flex items-start justify-between">
                     <p className="font-semibold">{row[1] || row[0]}</p>
                     <Icon name="arrow" size={16} />
@@ -1201,13 +1818,622 @@ function TablePage({
 }
 
 // ---------------------------------------------------------------------------
+// Objective Detail (P13)
+// ---------------------------------------------------------------------------
+
+type ObjDoc = {
+  id: string | number
+  title?: string
+  indicator?: string
+  target?: number
+  currentValue?: number
+  unit?: string
+  deadline?: string
+  status?: string
+  owner?: { id?: string | number; name?: string } | string | number
+  actions?: { id?: string; description?: string; responsible?: { name?: string } | string; resources?: string; deadline?: string; completed?: boolean }[]
+}
+
+function ObjectiveDetail({ objId, onBack }: { objId: string; onBack: () => void }) {
+  const { currentUser } = useContext(AppContext)
+  const [obj, setObj] = useState<ObjDoc | null>(null)
+  const [progressLogs, setProgressLogs] = useState<{ date?: string; value?: number; comment?: string; user?: { name?: string } | string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showProgressForm, setShowProgressForm] = useState(false)
+  const [progressValue, setProgressValue] = useState('')
+  const [progressComment, setProgressComment] = useState('')
+  const [isPending, startTransition] = useTransition()
+  const [toast, setToast] = useState('')
+
+  const refresh = () => {
+    setLoading(true)
+    Promise.all([getObjectiveById(objId), getObjectiveProgress(objId)]).then(([oRes, pRes]) => {
+      if (oRes.success) setObj(oRes.data as ObjDoc)
+      if (pRes.success) setProgressLogs((pRes.data as unknown[]).map((d: unknown) => d as { date?: string; value?: number; comment?: string; user?: { name?: string } | string }))
+      setLoading(false)
+    })
+  }
+
+  useEffect(() => { refresh() }, [objId])
+
+  const role = currentUser?.role ?? ''
+  const status = obj?.status ?? ''
+  const progress = obj?.target && obj.target > 0 ? Math.min(100, Math.round(((obj.currentValue ?? 0) / obj.target) * 100)) : 0
+  const ownerName = typeof obj?.owner === 'object' && obj?.owner !== null ? (obj.owner as { name?: string }).name ?? '—' : '—'
+
+  const transition = (newStatus: string, extraData?: Record<string, unknown>) => {
+    startTransition(async () => {
+      const res = await updateObjective(objId, { status: newStatus, ...extraData })
+      if (res.success) { setToast('Estado actualizado'); refresh() }
+      else setToast(res.error ?? 'Error')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
+  const submitProgress = () => {
+    if (!progressValue) return
+    startTransition(async () => {
+      const val = Number(progressValue)
+      const res = await addObjectiveProgress({ objectiveId: objId, value: val, comment: progressComment })
+      if (res.success) {
+        // Auto-cumplido si alcanza la meta
+        if (obj?.target && val >= obj.target) transition('Cumplido')
+        else { setToast('Avance registrado'); refresh() }
+        setShowProgressForm(false)
+        setProgressValue(''); setProgressComment('')
+      } else setToast(res.error ?? 'Error')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
+  if (loading) return <div className="mt-8 space-y-4">{[1,2,3].map(i => <div key={i} className="card animate-pulse h-24" />)}</div>
+  if (!obj) return <p className="mt-6 text-sm text-[#5B6B5F]">No se encontró el objetivo.</p>
+
+  return (
+    <div>
+      {/* Toast */}
+      {toast && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#2F6B3F] px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
+
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium text-[#2F6B3F]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{transform:'rotate(180deg)'}} aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+          Volver
+        </button>
+        <span className="text-[#CBD8CB]">/</span>
+        <span className="text-sm text-[#5B6B5F] truncate">{obj.title}</span>
+      </div>
+
+      {/* Header */}
+      <div className="card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">{obj.title}</h2>
+            <p className="mt-1 text-sm text-[#5B6B5F]">Indicador: {obj.indicator} · Responsable: {ownerName}</p>
+          </div>
+          <Badge>{status}</Badge>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+          <div><p className="text-[#5B6B5F] text-xs">Meta</p><p className="font-semibold mt-0.5">{obj.target} {obj.unit}</p></div>
+          <div><p className="text-[#5B6B5F] text-xs">Valor actual</p><p className="font-semibold mt-0.5">{obj.currentValue ?? 0} {obj.unit}</p></div>
+          <div><p className="text-[#5B6B5F] text-xs">Avance</p><p className="font-semibold mt-0.5">{progress}%</p></div>
+          <div><p className="text-[#5B6B5F] text-xs">Fecha límite</p><p className="font-semibold mt-0.5">{formatDate(obj.deadline)}</p></div>
+        </div>
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E6ECE6]">
+          <div className={`h-full rounded-full transition-all ${status === 'Desviado' ? 'bg-[#A86A00]' : status === 'Cumplido' ? 'bg-[#2F6B3F]' : 'bg-[#2F6B3F]'}`} style={{ width: `${progress}%` }} />
+        </div>
+
+        {/* Botones de transición */}
+        <div className="mt-5 flex flex-wrap gap-3 pt-4 border-t border-[#E5EBE5]">
+          {role === 'environmental_manager' && status === 'Borrador' && (
+            <button onClick={() => transition('En aprobación')} disabled={isPending} className="primary-btn disabled:opacity-60">Enviar a aprobación</button>
+          )}
+          {(role === 'senior_management' || role === 'administrator') && status === 'En aprobación' && (<>
+            <button onClick={() => transition('Activo')} disabled={isPending} className="primary-btn disabled:opacity-60">Aprobar</button>
+            <button onClick={() => transition('Borrador')} disabled={isPending} className="secondary-btn disabled:opacity-60">Pedir ajustes</button>
+          </>)}
+          {role === 'environmental_manager' && status === 'Activo' && (
+            <button onClick={() => setShowProgressForm(true)} className="primary-btn">Registrar avance</button>
+          )}
+          {role === 'environmental_manager' && status === 'Desviado' && (
+            <button onClick={() => transition('En aprobación')} disabled={isPending} className="secondary-btn disabled:opacity-60">Reprogramar plan</button>
+          )}
+        </div>
+
+        {/* Mini formulario de avance */}
+        {showProgressForm && (
+          <div className="mt-4 rounded-lg border border-[#CBD8CB] bg-[#F8FAF8] p-4 space-y-3">
+            <p className="text-sm font-medium">Registrar avance</p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium">Valor actual<input type="number" className="field mt-1" value={progressValue} onChange={e => setProgressValue(e.target.value)} placeholder={`Ej. ${(obj.currentValue ?? 0) + 1}`} /></label>
+              <label className="text-xs font-medium">Comentario<input className="field mt-1" value={progressComment} onChange={e => setProgressComment(e.target.value)} placeholder="Opcional" /></label>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={submitProgress} disabled={isPending} className="primary-btn text-sm disabled:opacity-60">Guardar</button>
+              <button onClick={() => setShowProgressForm(false)} className="secondary-btn text-sm">Cancelar</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Plan de acción */}
+      {(obj.actions ?? []).length > 0 && (
+        <section className="card mt-5 p-6">
+          <h3 className="section-title mb-4">Plan de acción</h3>
+          <div className="space-y-3">
+            {(obj.actions ?? []).map((a, i) => (
+              <div key={i} className={`flex items-start gap-3 rounded-lg p-3 ${a.completed ? 'bg-[#F4FAF4]' : 'bg-[#F8FAF8]'}`}>
+                <span className={`mt-0.5 size-5 shrink-0 rounded-full grid place-items-center text-[10px] font-bold ${a.completed ? 'bg-[#2F6B3F] text-white' : 'bg-[#ECEFF1] text-[#6B7280]'}`}>
+                  {a.completed ? '✓' : i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{a.description}</p>
+                  <p className="text-xs text-[#5B6B5F] mt-0.5">Recursos: {a.resources} · Plazo: {formatDate(a.deadline)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Historial de avances */}
+      <section className="card mt-5 p-6">
+        <h3 className="section-title mb-4">Historial de avances</h3>
+        {progressLogs.length === 0 ? (
+          <p className="text-sm text-[#5B6B5F]">Sin avances registrados aún.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-[#5B6B5F] border-b border-[#E5EBE5]">
+                <tr><th className="pb-2 pr-4">Fecha</th><th className="pb-2 pr-4">Valor</th><th className="pb-2">Comentario</th></tr>
+              </thead>
+              <tbody>
+                {progressLogs.map((p, i) => (
+                  <tr key={i} className="border-b border-[#F2F6F1]">
+                    <td className="py-2 pr-4 text-[#5B6B5F]">{formatDate(p.date)}</td>
+                    <td className="py-2 pr-4 font-semibold">{p.value} {obj.unit}</td>
+                    <td className="py-2 text-[#5B6B5F]">{p.comment ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Non-conformity Detail (P18)
+// ---------------------------------------------------------------------------
+
+type NCDoc = {
+  id: string | number
+  code?: string
+  description?: string
+  status?: string
+  criticality?: string
+  origin?: string
+  rootCause?: string
+  deadline?: string
+  owner?: { name?: string } | string
+  correctiveAction?: { description?: string; responsible?: { name?: string } | string; resources?: string; deadline?: string; effective?: string }
+  createdAt?: string
+  closedAt?: string
+}
+
+type AuditLogEntry = { id?: string | number; action?: string; detail?: string; date?: string; user?: { name?: string } | string }
+
+function NonConformityDetail({ ncId, onBack }: { ncId: string; onBack: () => void }) {
+  const { currentUser } = useContext(AppContext)
+  const [nc, setNc] = useState<NCDoc | null>(null)
+  const [logs, setLogs] = useState<AuditLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isPending, startTransition] = useTransition()
+  const [toast, setToast] = useState('')
+
+  const refresh = () => {
+    setLoading(true)
+    Promise.all([getNonConformityById(ncId), getAuditLogForRecord('non-conformities', ncId)]).then(([nRes, lRes]) => {
+      if (nRes.success) setNc(nRes.data as NCDoc)
+      if (lRes.success) setLogs((lRes.data as unknown[]).map(d => d as AuditLogEntry))
+      setLoading(false)
+    })
+  }
+
+  useEffect(() => { refresh() }, [ncId])
+
+  const role = currentUser?.role ?? ''
+  const status = nc?.status ?? ''
+
+  const transition = (newStatus: string) => {
+    startTransition(async () => {
+      const res = await updateNonConformity(ncId, { status: newStatus })
+      if (res.success) { setToast('Estado actualizado'); refresh() }
+      else setToast(res.error ?? 'Error')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
+  const statusColors: Record<string, string> = {
+    Detectada: '#A86A00', Escalada: '#A8321F', 'En análisis': '#1F5F8B',
+    'En ejecución': '#1F5F8B', Vencida: '#A8321F', 'En verificación': '#1F5F8B', Cerrada: '#2F6B3F',
+  }
+  const statusOrder = ['Detectada', 'Escalada', 'En análisis', 'En ejecución', 'En verificación', 'Cerrada']
+
+  if (loading) return <div className="mt-8 space-y-4">{[1,2,3].map(i => <div key={i} className="card animate-pulse h-24" />)}</div>
+  if (!nc) return <p className="mt-6 text-sm text-[#5B6B5F]">No se encontró la no conformidad.</p>
+
+  return (
+    <div>
+      {toast && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#2F6B3F] px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
+
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium text-[#2F6B3F]">
+          <Icon name="arrow" size={16} /> Volver
+        </button>
+        <span className="text-[#CBD8CB]">/</span>
+        <span className="text-sm text-[#5B6B5F]">{nc.code}</span>
+      </div>
+
+      {/* Header */}
+      <div className="card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg font-bold">{nc.code}</span>
+              <Badge>{nc.criticality === 'Crítica' ? 'Alta' : 'Media'}</Badge>
+            </div>
+            <p className="text-sm text-[#5B6B5F]">Origen: {nc.origin} · Creada: {formatDate(nc.createdAt)}</p>
+          </div>
+          <Badge>{status}</Badge>
+        </div>
+        <p className="mt-4 text-sm leading-6">{nc.description}</p>
+
+        {/* Botones por rol y estado */}
+        <div className="mt-5 flex flex-wrap gap-3 pt-4 border-t border-[#E5EBE5]">
+          {role === 'environmental_manager' && status === 'Detectada' && (
+            <button onClick={() => transition('En análisis')} disabled={isPending} className="primary-btn disabled:opacity-60">Asignar y analizar</button>
+          )}
+          {(role === 'senior_management' || role === 'administrator') && status === 'Escalada' && (
+            <button onClick={() => transition('En análisis')} disabled={isPending} className="primary-btn disabled:opacity-60">Asignar recursos</button>
+          )}
+          {role === 'environmental_manager' && status === 'En análisis' && (
+            <button onClick={() => transition('En ejecución')} disabled={isPending} className="primary-btn disabled:opacity-60">Aprobar plan con causa raíz</button>
+          )}
+          {role === 'environmental_manager' && status === 'En ejecución' && (
+            <button onClick={() => transition('En verificación')} disabled={isPending} className="primary-btn disabled:opacity-60">Acción completada</button>
+          )}
+          {role === 'auditor' && status === 'En verificación' && (<>
+            <button onClick={() => transition('Cerrada')} disabled={isPending} className="primary-btn disabled:opacity-60">Acción eficaz → Cerrar</button>
+            <button onClick={() => transition('En análisis')} disabled={isPending} className="secondary-btn disabled:opacity-60">Acción ineficaz → Reanalizar</button>
+          </>)}
+          {role === 'environmental_manager' && status === 'Vencida' && (
+            <button onClick={() => transition('En ejecución')} disabled={isPending} className="primary-btn disabled:opacity-60">Nuevo plazo → En ejecución</button>
+          )}
+        </div>
+      </div>
+
+      {/* Línea de tiempo */}
+      <section className="card mt-5 p-6">
+        <h3 className="section-title mb-5">Línea de tiempo</h3>
+        <div className="relative pl-5">
+          <div className="absolute left-2 top-2 bottom-2 w-px bg-[#CBD8CB]" />
+          {/* Estado actual como último paso */}
+          {statusOrder.filter((_, i) => i <= statusOrder.indexOf(status === 'Vencida' ? 'En ejecución' : status)).map((s, i, arr) => {
+            const isLast = i === arr.length - 1
+            const log = logs.find(l => l.detail?.includes(s))
+            return (
+              <div key={s} className="relative mb-5 pl-5">
+                <span className={`absolute -left-[3px] top-1 size-3 rounded-full border-2 ${isLast ? 'border-[#2F6B3F] bg-[#2F6B3F]' : 'border-[#CBD8CB] bg-white'}`} style={{ borderColor: statusColors[s] ?? '#CBD8CB', backgroundColor: isLast ? (statusColors[s] ?? '#2F6B3F') : 'white' }} />
+                <p className="text-sm font-semibold" style={{ color: statusColors[s] ?? '#17251B' }}>{s}</p>
+                {log && <p className="text-xs text-[#5B6B5F] mt-0.5">{formatDate(log.date)} {typeof log.user === 'object' ? `· ${(log.user as { name?: string }).name ?? ''}` : ''}</p>}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Acción correctiva */}
+      {nc.correctiveAction?.description && (
+        <section className="card mt-5 p-6">
+          <h3 className="section-title mb-4">Acción correctiva</h3>
+          <div className="grid gap-3 sm:grid-cols-2 text-sm">
+            <div><p className="text-xs text-[#5B6B5F]">Descripción</p><p className="mt-0.5">{nc.correctiveAction.description}</p></div>
+            <div><p className="text-xs text-[#5B6B5F]">Recursos</p><p className="mt-0.5">{nc.correctiveAction.resources ?? '—'}</p></div>
+            <div><p className="text-xs text-[#5B6B5F]">Plazo</p><p className="mt-0.5">{formatDate(nc.correctiveAction.deadline)}</p></div>
+            <div><p className="text-xs text-[#5B6B5F]">Eficacia</p><p className="mt-0.5">{nc.correctiveAction.effective === 'verdadero' ? '✓ Eficaz' : nc.correctiveAction.effective === 'falso' ? '✗ Ineficaz' : 'Pendiente de verificación'}</p></div>
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Audit Detail (P16)
+// ---------------------------------------------------------------------------
+
+type AuditDoc = {
+  id: string | number
+  area?: string
+  scope?: string
+  criteria?: string
+  date?: string
+  status?: string
+  auditor?: { name?: string } | string
+  findings?: { description?: string; criteria?: string; criticality?: string; isNonConformity?: boolean; evidenceUrl?: string }[]
+}
+
+function AuditDetail({ auditId, onBack }: { auditId: string; onBack: () => void }) {
+  const { currentUser } = useContext(AppContext)
+  const [audit, setAudit] = useState<AuditDoc | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [fDesc, setFDesc] = useState('')
+  const [fCriteria, setFCriteria] = useState('')
+  const [fCriticality, setFCriticality] = useState<'Normal' | 'Crítica'>('Normal')
+  const [fIsNC, setFIsNC] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [toast, setToast] = useState('')
+
+  const refresh = () => {
+    setLoading(true)
+    getAuditById(auditId).then(res => {
+      if (res.success) setAudit(res.data as AuditDoc)
+      setLoading(false)
+    })
+  }
+  useEffect(() => { refresh() }, [auditId])
+
+  const role = currentUser?.role ?? ''
+  const auditorName = typeof audit?.auditor === 'object' ? (audit.auditor as { name?: string }).name ?? '—' : '—'
+
+  const submitFinding = () => {
+    if (!fDesc || !fCriteria) return
+    startTransition(async () => {
+      const res = await addFindingToAudit(auditId, { description: fDesc, criteria: fCriteria, criticality: fCriticality, isNonConformity: fIsNC })
+      if (res.success) {
+        setToast(fIsNC ? 'Hallazgo agregado y NC creada' : 'Hallazgo agregado')
+        setShowForm(false); setFDesc(''); setFCriteria(''); setFCriticality('Normal'); setFIsNC(false)
+        refresh()
+      } else setToast(res.error ?? 'Error')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
+  const closeAudit = () => {
+    startTransition(async () => {
+      const res = await updateAudit(auditId, { status: 'Cerrada' })
+      if (res.success) { setToast('Auditoría cerrada'); refresh() }
+      else setToast(res.error ?? 'Error')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
+  if (loading) return <div className="mt-8 space-y-4">{[1,2].map(i => <div key={i} className="card animate-pulse h-24" />)}</div>
+  if (!audit) return <p className="mt-6 text-sm text-[#5B6B5F]">No se encontró la auditoría.</p>
+
+  return (
+    <div>
+      {toast && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#2F6B3F] px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium text-[#2F6B3F]"><Icon name="arrow" size={16} /> Volver</button>
+        <span className="text-[#CBD8CB]">/</span>
+        <span className="text-sm text-[#5B6B5F]">{audit.area}</span>
+      </div>
+      <div className="card p-6">
+        <div className="flex flex-wrap justify-between gap-3">
+          <div><h2 className="text-xl font-semibold">{audit.area}</h2><p className="text-sm text-[#5B6B5F] mt-1">Auditor: {auditorName} · Fecha: {formatDate(audit.date)}</p></div>
+          <Badge>{audit.status ?? '—'}</Badge>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
+          <div><p className="text-xs text-[#5B6B5F]">Alcance</p><p className="mt-0.5">{audit.scope ?? '—'}</p></div>
+          <div><p className="text-xs text-[#5B6B5F]">Criterios</p><p className="mt-0.5">{audit.criteria ?? '—'}</p></div>
+        </div>
+        {role === 'auditor' && audit.status !== 'Cerrada' && (
+          <div className="mt-5 flex gap-3 pt-4 border-t border-[#E5EBE5]">
+            <button onClick={() => setShowForm(true)} className="primary-btn">+ Agregar hallazgo</button>
+            <button onClick={closeAudit} disabled={isPending} className="secondary-btn disabled:opacity-60">Cerrar auditoría</button>
+          </div>
+        )}
+      </div>
+
+      {/* Formulario hallazgo */}
+      {showForm && (
+        <div className="card mt-5 p-6 space-y-4">
+          <h3 className="section-title">Nuevo hallazgo</h3>
+          <label className="block text-sm font-medium">Descripción<textarea required className="field mt-2 min-h-20" value={fDesc} onChange={e => setFDesc(e.target.value)} /></label>
+          <label className="block text-sm font-medium">Criterio incumplido<input required className="field mt-2" value={fCriteria} onChange={e => setFCriteria(e.target.value)} /></label>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block text-sm font-medium">Criticidad
+              <select className="field mt-2" value={fCriticality} onChange={e => setFCriticality(e.target.value as 'Normal' | 'Crítica')}>
+                <option value="Normal">Normal</option>
+                <option value="Crítica">Crítica</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 mt-7 text-sm font-medium cursor-pointer">
+              <input type="checkbox" className="accent-[#2F6B3F]" checked={fIsNC} onChange={e => setFIsNC(e.target.checked)} />
+              Genera no conformidad
+            </label>
+          </div>
+          {fIsNC && <p className={`rounded-lg px-3 py-2 text-xs ${fCriticality === 'Crítica' ? 'bg-[#F8DAD4] text-[#A8321F]' : 'bg-[#FBEBCB] text-[#A86A00]'}`}>
+            Se creará una NC en estado {fCriticality === 'Crítica' ? 'Escalada (notifica Alta Dirección)' : 'Detectada'}.
+          </p>}
+          <div className="flex gap-2">
+            <button onClick={submitFinding} disabled={isPending} className="primary-btn disabled:opacity-60">Guardar hallazgo</button>
+            <button onClick={() => setShowForm(false)} className="secondary-btn">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista hallazgos */}
+      <section className="card mt-5 p-6">
+        <h3 className="section-title mb-4">Hallazgos ({(audit.findings ?? []).length})</h3>
+        {(audit.findings ?? []).length === 0 ? (
+          <p className="text-sm text-[#5B6B5F]">Sin hallazgos registrados.</p>
+        ) : (
+          <div className="space-y-3">
+            {(audit.findings ?? []).map((f, i) => (
+              <div key={i} className="rounded-lg border border-[#E5EBE5] p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium">{f.description}</p>
+                  <div className="flex gap-2 shrink-0">
+                    <Badge>{f.criticality === 'Crítica' ? 'Alta' : 'Media'}</Badge>
+                    {f.isNonConformity && <span className="inline-flex rounded-full bg-[#F8DAD4] px-2 py-0.5 text-xs font-semibold text-[#A8321F]">NC</span>}
+                  </div>
+                </div>
+                <p className="text-xs text-[#5B6B5F] mt-1">Criterio: {f.criteria}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Aspect Detail (P08)
+// ---------------------------------------------------------------------------
+
+type AspectDoc = {
+  id: string | number
+  name?: string
+  activity?: string
+  impact?: string
+  severity?: number
+  frequency?: number
+  scope?: number
+  significance?: number
+  level?: string
+}
+
+function AspectDetail({ aspectId, onBack }: { aspectId: string; onBack: () => void }) {
+  const { organizationId } = useContext(AppContext)
+  const [asp, setAsp] = useState<AspectDoc | null>(null)
+  const [related, setRelated] = useState<{ title?: string; compliance?: string }[]>([])
+  const [logs, setLogs] = useState<AuditLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      getAspectById(aspectId),
+      getAuditLogForRecord('aspects', aspectId),
+      organizationId ? getLegalRequirements(organizationId) : Promise.resolve({ success: true, data: [] }),
+    ]).then(([aRes, lRes, lrRes]) => {
+      if (aRes.success) setAsp(aRes.data as AspectDoc)
+      if (lRes.success) setLogs((lRes.data as unknown[]).map(d => d as AuditLogEntry))
+      if (lrRes.success) {
+        const all = (lrRes.data as unknown[]) ?? []
+        const filtered = all.filter((d: unknown) => {
+          const doc = d as { aspect?: { id?: string | number } | string | number }
+          const aId = typeof doc.aspect === 'object' && doc.aspect !== null ? (doc.aspect as { id?: string | number }).id : doc.aspect
+          return String(aId) === String(aspectId)
+        })
+        setRelated(filtered.map((d: unknown) => d as { title?: string; compliance?: string }))
+      }
+      setLoading(false)
+    })
+  }, [aspectId, organizationId])
+
+  if (loading) return <div className="mt-8 space-y-4">{[1,2].map(i => <div key={i} className="card animate-pulse h-24" />)}</div>
+  if (!asp) return <p className="mt-6 text-sm text-[#5B6B5F]">No se encontró el aspecto.</p>
+
+  const sig = asp.significance ?? ((asp.severity ?? 0) * (asp.frequency ?? 0) * (asp.scope ?? 0))
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium text-[#2F6B3F]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{transform:'rotate(180deg)'}} aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+          Volver
+        </button>
+        <span className="text-[#CBD8CB]">/</span>
+        <span className="text-sm text-[#5B6B5F] truncate">{asp.name}</span>
+      </div>
+
+      <div className="card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">{asp.name}</h2>
+            <p className="mt-1 text-sm text-[#5B6B5F]">Actividad: {asp.activity ?? '—'}</p>
+          </div>
+          <Badge>{asp.level ?? 'Pendiente'}</Badge>
+        </div>
+        <p className="mt-4 text-sm text-[#5B6B5F] leading-6"><strong>Impacto:</strong> {asp.impact ?? '—'}</p>
+
+        {/* Fórmula de significancia */}
+        <div className="mt-5 rounded-lg bg-[#F2F6F1] p-4">
+          <p className="text-xs font-semibold text-[#5B6B5F] uppercase tracking-wide mb-3">Cálculo de significancia</p>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {[['Severidad', asp.severity], ['×', null], ['Frecuencia', asp.frequency], ['×', null], ['Alcance', asp.scope], ['=', null]].map(([label, val], i) =>
+              val === null ? (
+                <span key={i} className="text-[#5B6B5F] font-bold">{label}</span>
+              ) : (
+                <div key={i} className="flex flex-col items-center rounded-lg bg-white border border-[#CBD8CB] px-3 py-2 min-w-[60px]">
+                  <span className="text-lg font-bold text-[#2F6B3F]">{val ?? '—'}</span>
+                  <span className="text-[10px] text-[#5B6B5F]">{label}</span>
+                </div>
+              )
+            )}
+            <div className="flex flex-col items-center rounded-lg bg-[#2F6B3F] text-white px-4 py-2 min-w-[70px]">
+              <span className="text-lg font-bold">{sig || '—'}</span>
+              <span className="text-[10px] opacity-80">Significancia</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Requisitos legales asociados */}
+      {related.length > 0 && (
+        <section className="card mt-5 p-6">
+          <h3 className="section-title mb-4">Requisitos legales asociados</h3>
+          <div className="space-y-2">
+            {related.map((r, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg bg-[#F8FAF8] px-4 py-3">
+                <span className="text-sm font-medium">{r.title ?? '—'}</span>
+                <Badge>{r.compliance ?? 'Sin evaluar'}</Badge>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Historial */}
+      <section className="card mt-5 p-6">
+        <h3 className="section-title mb-4">Historial de cambios</h3>
+        {logs.length === 0 ? (
+          <p className="text-sm text-[#5B6B5F]">Sin historial registrado.</p>
+        ) : (
+          <div className="space-y-2">
+            {logs.map((l, i) => (
+              <div key={i} className="flex items-start gap-3 rounded-lg bg-[#F8FAF8] px-4 py-3 text-sm">
+                <span className="mt-0.5 size-2 rounded-full bg-[#CBD8CB] shrink-0" />
+                <div>
+                  <p className="font-medium">{l.detail ?? l.action}</p>
+                  <p className="text-xs text-[#5B6B5F] mt-0.5">{formatDate(l.date)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Objectives page
 // ---------------------------------------------------------------------------
 
 function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
   const { currentUser, organizationId } = useContext(AppContext)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [cards, setCards] = useState<
     {
+      id: string
       title: string
       owner: string
       progress: number
@@ -1227,6 +2453,7 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
         setCards(
           docs.map((d: unknown) => {
             const doc = d as {
+              id?: string | number
               title?: string
               owner?: { name?: string } | string
               currentValue?: number
@@ -1244,6 +2471,7 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
                 ? Math.min(100, Math.round(((doc.currentValue ?? 0) / doc.target) * 100))
                 : 0
             return {
+              id: String(doc.id ?? ''),
               title: doc.title ?? '—',
               owner: ownerName,
               progress,
@@ -1259,6 +2487,8 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
 
   const canApprove =
     currentUser?.role === 'senior_management' || currentUser?.role === 'administrator'
+
+  if (selectedId) return <ObjectiveDetail objId={selectedId} onBack={() => setSelectedId(null)} />
 
   return (
     <div>
@@ -1279,7 +2509,13 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
           ))}
         </div>
       ) : cards.length === 0 ? (
-        <p className="mt-6 text-sm text-[#5B6B5F]">Sin objetivos registrados.</p>
+        <EmptyState
+          icon="target"
+          title="Sin objetivos registrados"
+          description="Define metas SMART para mejorar el desempeño ambiental de tu organización."
+          action={currentUser?.role === 'environmental_manager' || currentUser?.role === 'administrator' ? 'Nuevo objetivo' : undefined}
+          onAction={onAdd}
+        />
       ) : (
         <div className="mt-6 grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
           {cards.map((x) => (
@@ -1307,9 +2543,7 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
                   <Icon name="calendar" size={14} />
                   {x.deadline}
                 </span>
-                {canApprove && (
-                  <button className="font-semibold text-[#2F6B3F]">Aprobar objetivo</button>
-                )}
+                <button onClick={() => setSelectedId(x.id)} className="font-semibold text-[#2F6B3F]">Ver detalle</button>
               </div>
             </div>
           ))}
@@ -1325,6 +2559,7 @@ function ObjectivesPage({ onAdd }: { onAdd: () => void }) {
 
 function NonConformities() {
   const { organizationId } = useContext(AppContext)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [ncDocs, setNcDocs] = useState<
     { id: string; code: string; description: string; criticality: string; status: string }[]
   >([])
@@ -1360,6 +2595,8 @@ function NonConformities() {
 
   const columnDefs = ['Detectada', 'Escalada', 'En análisis', 'En ejecución', 'En verificación'] as const
 
+  if (selectedId) return <NonConformityDetail ncId={selectedId} onBack={() => setSelectedId(null)} />
+
   return (
     <div>
       <PageHeading
@@ -1375,6 +2612,12 @@ function NonConformities() {
             </div>
           ))}
         </div>
+      ) : ncDocs.length === 0 ? (
+        <EmptyState
+          icon="alert"
+          title="Sin no conformidades registradas"
+          description="Las no conformidades se crean automáticamente al marcar un requisito como 'No cumple' o al registrar un hallazgo de auditoría."
+        />
       ) : (
         <div className="mt-6 grid gap-4 xl:grid-cols-5">
           {columnDefs.map((col) => {
@@ -1389,6 +2632,7 @@ function NonConformities() {
                   {colDocs.map((n) => (
                     <button
                       key={n.id}
+                      onClick={() => setSelectedId(n.id)}
                       className="w-full rounded-lg border border-[#D7E1D7] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5"
                     >
                       <div className="flex justify-between">
@@ -1403,7 +2647,9 @@ function NonConformities() {
                     </button>
                   ))}
                   {colDocs.length === 0 && (
-                    <p className="px-2 py-4 text-xs text-[#5B6B5F]">Sin registros</p>
+                    <div className="rounded-lg bg-white/60 px-3 py-5 text-center">
+                      <p className="text-xs text-[#5B6B5F]">Sin registros</p>
+                    </div>
                   )}
                 </div>
               </section>
@@ -1504,14 +2750,106 @@ function NotificationsPage() {
 // ---------------------------------------------------------------------------
 
 function Reports() {
+  const { organizationId } = useContext(AppContext)
+
+  // ── Estado con datos reales ──────────────────────────────────────────────
+  const [stats, setStats] = useState({
+    legal: { cumple: 0, noCumple: 0, sinEvaluar: 0, total: 0 },
+    objectives: { cumplidos: 0, total: 0 },
+    aspects: { alta: 0, media: 0, baja: 0 },
+    nc: { cerradas: 0, byStatus: {} as Record<string, number> },
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!organizationId) return
+    Promise.all([
+      getAspects(organizationId),
+      getLegalRequirements(organizationId),
+      getObjectives(organizationId),
+      getNonConformities(organizationId),
+    ]).then(([asp, leg, obj, nc]) => {
+      // Aspectos por nivel
+      const aspects = (asp.data as { level?: string }[] ?? [])
+      const alta = aspects.filter(a => a.level === 'Alta').length
+      const media = aspects.filter(a => a.level === 'Media').length
+      const baja = aspects.filter(a => a.level === 'Baja').length
+
+      // Requisitos legales
+      const legDocs = (leg.data as { compliance?: string }[] ?? [])
+      const cumple = legDocs.filter(d => d.compliance === 'Cumple').length
+      const noCumple = legDocs.filter(d => d.compliance === 'No cumple').length
+      const sinEvaluar = legDocs.filter(d => d.compliance === 'Sin evaluar').length
+
+      // Objetivos
+      const objDocs = (obj.data as { status?: string }[] ?? [])
+      const cumplidos = objDocs.filter(o => o.status === 'Cumplido').length
+
+      // No conformidades
+      const ncDocs = (nc.data as { status?: string }[] ?? [])
+      const ncCerradas = ncDocs.filter(n => n.status === 'Cerrada').length
+      const byStatus: Record<string, number> = {}
+      ncDocs.forEach(n => {
+        const s = n.status ?? 'Desconocido'
+        byStatus[s] = (byStatus[s] ?? 0) + 1
+      })
+
+      setStats({
+        legal: { cumple, noCumple, sinEvaluar, total: legDocs.length },
+        objectives: { cumplidos, total: objDocs.length },
+        aspects: { alta, media, baja },
+        nc: { cerradas: ncCerradas, byStatus },
+      })
+      setLoading(false)
+    })
+  }, [organizationId])
+
+  // ── CSV con datos reales ─────────────────────────────────────────────────
   const exportCSV = () => {
-    const csv =
-      'Indicador,Valor,Periodo\nCumplimiento legal,87%,2026\nObjetivos cumplidos,75%,2026\nNo conformidades abiertas,4,2026'
+    const pct = (n: number, d: number) => d > 0 ? `${Math.round((n / d) * 100)}%` : '0%'
+    const rows = [
+      ['Indicador', 'Valor', 'Total'],
+      ['Cumplimiento legal', pct(stats.legal.cumple, stats.legal.total), String(stats.legal.total)],
+      ['Objetivos cumplidos', pct(stats.objectives.cumplidos, stats.objectives.total), String(stats.objectives.total)],
+      ['Aspectos en nivel alto', String(stats.aspects.alta), String(stats.aspects.alta + stats.aspects.media + stats.aspects.baja)],
+      ['NC cerradas', String(stats.nc.cerradas), String(Object.values(stats.nc.byStatus).reduce((a, b) => a + b, 0))],
+    ]
+    const csv = rows.map(r => r.join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = 'ecocert-360-indicadores.csv'
     a.click()
   }
+
+  // ── Cálculos derivados ───────────────────────────────────────────────────
+  const pctLegal = stats.legal.total > 0
+    ? Math.round((stats.legal.cumple / stats.legal.total) * 100)
+    : 0
+  const pctObj = stats.objectives.total > 0
+    ? Math.round((stats.objectives.cumplidos / stats.objectives.total) * 100)
+    : 0
+  const totalAspectos = stats.aspects.alta + stats.aspects.media + stats.aspects.baja
+  const totalNC = Object.values(stats.nc.byStatus).reduce((a, b) => a + b, 0)
+
+  const kpiCards = [
+    { label: 'Cumplimiento legal', value: `${pctLegal}%` },
+    { label: 'Objetivos cumplidos', value: `${pctObj}%` },
+    { label: 'Aspectos en nivel alto', value: String(stats.aspects.alta) },
+    { label: 'NC cerradas', value: String(stats.nc.cerradas) },
+  ]
+
+  const aspectBars = [
+    { label: 'Alta', count: stats.aspects.alta, pct: totalAspectos > 0 ? Math.round((stats.aspects.alta / totalAspectos) * 100) : 0 },
+    { label: 'Media', count: stats.aspects.media, pct: totalAspectos > 0 ? Math.round((stats.aspects.media / totalAspectos) * 100) : 0 },
+    { label: 'Baja', count: stats.aspects.baja, pct: totalAspectos > 0 ? Math.round((stats.aspects.baja / totalAspectos) * 100) : 0 },
+  ]
+
+  const ncStatuses = ['Detectada', 'En análisis', 'En ejecución', 'Vencida', 'En verificación', 'Cerrada', 'Escalada']
+  const ncColors: Record<string, string> = {
+    Detectada: '#DCA444', 'En análisis': '#5A8DB2', 'En ejecución': '#2F6B3F',
+    Vencida: '#B94B39', 'En verificación': '#5A8DB2', Cerrada: '#6B7280', Escalada: '#B94B39',
+  }
+
   return (
     <div>
       <PageHeading
@@ -1527,72 +2865,122 @@ function Reports() {
           <Icon name="file" size={17} />
           Imprimir PDF
         </button>
-        <select className="ml-auto h-10 rounded-lg border border-[#CBD8CB] bg-white px-3 text-sm">
-          <option>Últimos 12 meses</option>
-          <option>Este trimestre</option>
-        </select>
       </div>
-      <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {(['Cumplimiento legal', 'Objetivos cumplidos', 'Aspectos en nivel alto', 'NC cerradas'] as const).map(
-          (label, i) => (
-            <div key={label} className="card p-5">
-              <p className="text-sm text-[#5B6B5F]">{label}</p>
-              <p className="mt-3 text-3xl font-semibold">
-                {['87%', '75%', '8', '18'][i]}
-              </p>
-              <p className="mt-2 text-xs font-medium text-[#2F6B3F]">↑ 6% vs. periodo anterior</p>
-            </div>
-          ),
-        )}
-      </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <section className="card p-6">
-          <h2 className="section-title">Aspectos por nivel</h2>
-          <div className="mt-8 space-y-5">
-            {[
-              ['Alta', 8, 35],
-              ['Media', 11, 48],
-              ['Baja', 4, 17],
-            ].map((x) => (
-              <div
-                key={x[0] as string}
-                className="grid grid-cols-[60px_1fr_40px] items-center gap-3 text-sm"
-              >
-                <Badge>{x[0] as string}</Badge>
-                <div className="h-3 rounded-full bg-[#E8EDE8]">
-                  <div
-                    className="h-full rounded-full bg-[#2F6B3F]"
-                    style={{ width: `${x[2]}%` }}
-                  />
-                </div>
-                <span className="font-semibold">{x[1]}</span>
+
+      {loading ? (
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map(i => <div key={i} className="card animate-pulse h-28 p-5" />)}
+        </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {kpiCards.map(k => (
+              <div key={k.label} className="card p-5">
+                <p className="text-sm text-[#5B6B5F]">{k.label}</p>
+                <p className="mt-3 text-3xl font-semibold">{k.value}</p>
+                {totalAspectos === 0 && k.label === 'Aspectos en nivel alto' && (
+                  <p className="mt-2 text-xs text-[#5B6B5F]">Sin datos aún</p>
+                )}
               </div>
             ))}
           </div>
-        </section>
-        <section className="card p-6">
-          <h2 className="section-title">Tendencia de no conformidades</h2>
-          <div className="mt-9 flex h-40 items-end gap-3 border-b border-l border-[#CBD8CB] px-4">
-            {[58, 70, 45, 78, 62, 38, 54, 30].map((h, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t bg-[#8FB59A] transition hover:bg-[#2F6B3F]"
-                style={{ height: `${h}%` }}
-              />
-            ))}
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            {/* Aspectos por nivel */}
+            <section className="card p-6">
+              <h2 className="section-title">Aspectos por nivel</h2>
+              {totalAspectos === 0 ? (
+                <p className="mt-6 text-sm text-[#5B6B5F]">Sin aspectos registrados aún.</p>
+              ) : (
+                <div className="mt-8 space-y-5">
+                  {aspectBars.map(x => (
+                    <div key={x.label} className="grid grid-cols-[60px_1fr_40px] items-center gap-3 text-sm">
+                      <Badge>{x.label}</Badge>
+                      <div className="h-3 rounded-full bg-[#E8EDE8]">
+                        <div className="h-full rounded-full bg-[#2F6B3F]" style={{ width: `${x.pct}%` }} />
+                      </div>
+                      <span className="font-semibold">{x.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* NC por estado */}
+            <section className="card p-6">
+              <h2 className="section-title">No conformidades por estado</h2>
+              {totalNC === 0 ? (
+                <p className="mt-6 text-sm text-[#5B6B5F]">Sin no conformidades registradas aún.</p>
+              ) : (
+                <div className="mt-6 flex items-end justify-around gap-2 border-b border-[#DDE5DD] pb-2">
+                  {ncStatuses.filter(s => stats.nc.byStatus[s]).map(s => {
+                    const count = stats.nc.byStatus[s] ?? 0
+                    const heightPct = Math.round((count / Math.max(...Object.values(stats.nc.byStatus))) * 100)
+                    return (
+                      <div key={s} className="flex flex-1 flex-col items-center gap-1">
+                        <span className="text-xs font-semibold">{count}</span>
+                        <div className="w-full max-w-10 rounded-t-md" style={{ height: `${Math.max(heightPct, 10)}px`, backgroundColor: ncColors[s] ?? '#6B7280' }} />
+                        <span className="text-[9px] text-center text-[#5B6B5F] leading-tight">{s}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Cumplimiento legal */}
+            <section className="card p-6">
+              <h2 className="section-title">Cumplimiento legal</h2>
+              {stats.legal.total === 0 ? (
+                <p className="mt-4 text-sm text-[#5B6B5F]">Sin requisitos legales registrados aún.</p>
+              ) : (
+                <>
+                  <div className="mt-4 flex items-center justify-between text-sm font-semibold">
+                    <span>{pctLegal}%</span>
+                    <span className="text-[#5B6B5F] font-normal">{stats.legal.cumple} de {stats.legal.total}</span>
+                  </div>
+                  <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#ECEFF1]">
+                    <div className="h-full bg-[#2F6B3F] rounded-full" style={{ width: `${pctLegal}%` }} />
+                  </div>
+                  <div className="mt-6 grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-2xl font-semibold">{stats.legal.cumple}</p>
+                      <p className="text-xs text-[#5B6B5F]">Cumplen</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-[#A8321F]">{stats.legal.noCumple}</p>
+                      <p className="text-xs text-[#5B6B5F]">No cumplen</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-[#6B7280]">{stats.legal.sinEvaluar}</p>
+                      <p className="text-xs text-[#5B6B5F]">Sin evaluar</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
+
+            {/* Objetivos */}
+            <section className="card p-6">
+              <h2 className="section-title">Progreso de objetivos</h2>
+              {stats.objectives.total === 0 ? (
+                <p className="mt-4 text-sm text-[#5B6B5F]">Sin objetivos registrados aún.</p>
+              ) : (
+                <>
+                  <div className="mt-4 flex items-center justify-between text-sm font-semibold">
+                    <span>{pctObj}% cumplidos</span>
+                    <span className="text-[#5B6B5F] font-normal">{stats.objectives.cumplidos} de {stats.objectives.total}</span>
+                  </div>
+                  <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#ECEFF1]">
+                    <div className="h-full bg-[#2F6B3F] rounded-full" style={{ width: `${pctObj}%` }} />
+                  </div>
+                </>
+              )}
+            </section>
           </div>
-          <div className="mt-2 flex justify-between pl-4 text-[10px] text-[#5B6B5F]">
-            <span>Abr</span>
-            <span>May</span>
-            <span>Jun</span>
-            <span>Jul</span>
-            <span>Ago</span>
-            <span>Sep</span>
-            <span>Oct</span>
-            <span>Nov</span>
-          </div>
-        </section>
-      </div>
+        </>
+      )}
     </div>
   )
 }
@@ -1602,51 +2990,106 @@ function Reports() {
 // ---------------------------------------------------------------------------
 
 function Parameters() {
+  const { organizationId } = useContext(AppContext)
+  const [umbralAlta, setUmbralAlta] = useState(60)
+  const [umbralMedia, setUmbralMedia] = useState(27)
+  const [dias30, setDias30] = useState(true)
+  const [dias15, setDias15] = useState(true)
+  const [dias7, setDias7] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [isPending, startTransition] = useTransition()
+  const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    if (!organizationId) return
+    getParameters(organizationId).then(res => {
+      if (res.success && res.data) {
+        const d = res.data as { umbral_alta?: number; umbral_media?: number; dias_alerta?: number[] }
+        if (d.umbral_alta) setUmbralAlta(d.umbral_alta)
+        if (d.umbral_media) setUmbralMedia(d.umbral_media)
+        if (d.dias_alerta) {
+          setDias30(d.dias_alerta.includes(30))
+          setDias15(d.dias_alerta.includes(15))
+          setDias7(d.dias_alerta.includes(7))
+        }
+      }
+      setLoading(false)
+    })
+  }, [organizationId])
+
+  const handleSave = () => {
+    if (!organizationId) return
+    const diasAlerta = [dias30 && 30, dias15 && 15, dias7 && 7].filter(Boolean) as number[]
+    startTransition(async () => {
+      const res = await saveParameters(organizationId, { umbralAlta, umbralMedia, diasAlerta })
+      if (res.success) setToast('Parámetros guardados correctamente')
+      else setToast(res.error ?? 'Error al guardar')
+      setTimeout(() => setToast(''), 3000)
+    })
+  }
+
   return (
     <div>
+      {toast && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#2F6B3F] px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
       <PageHeading
         title="Parámetros del sistema"
         desc="Configura umbrales y alertas para tu organización."
       />
-      <div className="mt-6 grid max-w-3xl gap-6">
-        <section className="card p-6">
-          <h2 className="section-title">Significancia ambiental</h2>
-          <p className="mt-1 text-sm text-[#5B6B5F]">
-            Los niveles se calculan como severidad × frecuencia × alcance.
-          </p>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <label className="text-sm font-medium">
-              Umbral nivel alto
-              <input className="field mt-2" type="number" defaultValue="60" />
-            </label>
-            <label className="text-sm font-medium">
-              Umbral nivel medio
-              <input className="field mt-2" type="number" defaultValue="27" />
-            </label>
-          </div>
-        </section>
-        <section className="card p-6">
-          <h2 className="section-title">Alertas de vencimiento</h2>
-          <p className="mt-1 text-sm text-[#5B6B5F]">
-            Define cuándo se crearán notificaciones preventivas.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {['30 días antes', '15 días antes', '7 días antes'].map((x) => (
-              <label
-                key={x}
-                className="flex items-center gap-2 rounded-lg border border-[#CBD8CB] px-4 py-3 text-sm"
-              >
-                <input defaultChecked type="checkbox" className="accent-[#2F6B3F]" />
-                {x}
+      {loading ? (
+        <div className="mt-6 max-w-3xl space-y-4">
+          <div className="card animate-pulse h-32" />
+          <div className="card animate-pulse h-24" />
+        </div>
+      ) : (
+        <div className="mt-6 grid max-w-3xl gap-6">
+          <section className="card p-6">
+            <h2 className="section-title">Significancia ambiental</h2>
+            <p className="mt-1 text-sm text-[#5B6B5F]">
+              Los niveles se calculan como severidad × frecuencia × alcance (rango 1–125).
+            </p>
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <label className="text-sm font-medium">
+                Umbral nivel Alto (≥)
+                <input className="field mt-2" type="number" min={1} max={125} value={umbralAlta} onChange={e => setUmbralAlta(Number(e.target.value))} />
+                <span className="mt-1 block text-xs text-[#5B6B5F]">Por defecto: 60</span>
               </label>
-            ))}
-          </div>
-        </section>
-        <button className="primary-btn w-fit">
-          <Icon name="check" size={17} />
-          Guardar cambios
-        </button>
-      </div>
+              <label className="text-sm font-medium">
+                Umbral nivel Medio (≥)
+                <input className="field mt-2" type="number" min={1} max={125} value={umbralMedia} onChange={e => setUmbralMedia(Number(e.target.value))} />
+                <span className="mt-1 block text-xs text-[#5B6B5F]">Por defecto: 27. Baja si es menor a este umbral.</span>
+              </label>
+            </div>
+            {/* Vista previa */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full bg-[#F8DAD4] px-3 py-1 text-xs font-semibold text-[#A8321F]">Alta ≥ {umbralAlta}</span>
+              <span className="rounded-full bg-[#FBEBCB] px-3 py-1 text-xs font-semibold text-[#A86A00]">Media ≥ {umbralMedia}</span>
+              <span className="rounded-full bg-[#DDEBDD] px-3 py-1 text-xs font-semibold text-[#2F6B3F]">Baja &lt; {umbralMedia}</span>
+            </div>
+          </section>
+          <section className="card p-6">
+            <h2 className="section-title">Alertas de vencimiento de requisitos</h2>
+            <p className="mt-1 text-sm text-[#5B6B5F]">
+              El sistema generará notificaciones preventivas con esta anticipación.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              {([{ label: '30 días antes', val: dias30, set: setDias30 }, { label: '15 días antes', val: dias15, set: setDias15 }, { label: '7 días antes', val: dias7, set: setDias7 }]).map(({ label, val, set }) => (
+                <label key={label} className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm cursor-pointer transition ${val ? 'border-[#2F6B3F] bg-[#F4FAF4]' : 'border-[#CBD8CB]'}`}>
+                  <input type="checkbox" className="accent-[#2F6B3F]" checked={val} onChange={e => set(e.target.checked)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </section>
+          <button
+            onClick={handleSave}
+            disabled={isPending}
+            className="primary-btn w-fit disabled:opacity-60"
+          >
+            <Icon name="check" size={17} />
+            {isPending ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1731,6 +3174,12 @@ function Modal({
   const [evidSource, setEvidSource] = useState('')
   const [evidRecordId, setEvidRecordId] = useState('')
   const [evidStatus, setEvidStatus] = useState('Pendiente')
+
+  // Invitar usuario fields
+  const [inviteName, setInviteName] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [invitePassword, setInvitePassword] = useState('')
+  const [inviteRole, setInviteRole] = useState('environmental_manager')
 
   // Users list for selects
   const [users, setUsers] = useState<UserDoc[]>([])
@@ -1842,6 +3291,14 @@ function Modal({
           statusReview: evidStatus,
           uploadedBy: currentUser?.id,
         })
+      } else if (page === 'usuarios') {
+        result = await inviteUser({
+          orgId: organizationId!,
+          name: inviteName,
+          email: inviteEmail,
+          password: invitePassword,
+          role: inviteRole,
+        })
       } else {
         onClose()
         return
@@ -1864,6 +3321,7 @@ function Modal({
     incidentes: 'Reportar incidente',
     capacitacion: 'Nueva capacitación',
     evidencias: 'Cargar evidencia',
+    usuarios: 'Invitar usuario',
   }
 
   return (
@@ -2518,6 +3976,63 @@ function Modal({
             </>
           )}
 
+          {/* ---- USUARIOS (invitar) ---- */}
+          {page === 'usuarios' && (
+            <>
+              <div className="rounded-lg bg-[#F2F6F1] px-4 py-3 text-xs text-[#5B6B5F]">
+                El usuario recibirá acceso a la organización <strong>{currentUser?.organization?.name}</strong> con el rol asignado. Deberá iniciar sesión con el correo y contraseña que indiques.
+              </div>
+              <label className="block text-sm font-medium">
+                Nombre completo
+                <input
+                  required
+                  className="field mt-2"
+                  placeholder="Nombre del usuario"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                Correo electrónico
+                <input
+                  required
+                  type="email"
+                  className="field mt-2"
+                  placeholder="usuario@empresa.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                Contraseña inicial
+                <input
+                  required
+                  type="password"
+                  className="field mt-2"
+                  placeholder="Mínimo 8 caracteres"
+                  value={invitePassword}
+                  onChange={(e) => setInvitePassword(e.target.value)}
+                  minLength={8}
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                Rol
+                <select
+                  required
+                  className="field mt-2"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                >
+                  <option value="senior_management">Alta dirección</option>
+                  <option value="environmental_manager">Responsable ambiental</option>
+                  <option value="auditor">Auditor</option>
+                  <option value="collaborator">Colaborador</option>
+                  <option value="supplier">Proveedor</option>
+                </select>
+              </label>
+            </>
+          )}
+
           {error && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -2538,6 +4053,24 @@ function Modal({
 }
 
 // ---------------------------------------------------------------------------
+// AccessDenied
+// ---------------------------------------------------------------------------
+
+function AccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="mb-5 grid size-16 place-items-center rounded-full bg-[#F8DAD4] text-[#A8321F]">
+        <Icon name="close" size={28} />
+      </div>
+      <h2 className="text-xl font-semibold text-[#17251B]">Acceso restringido</h2>
+      <p className="mt-2 text-sm text-[#5B6B5F] max-w-xs mx-auto">
+        No tienes permisos para ver esta sección. Contacta al administrador de tu organización.
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // EcoCertShell
 // ---------------------------------------------------------------------------
 
@@ -2550,21 +4083,36 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  // Fetch unread notification count
+  // Fetch unread notification count + aplicar transiciones automáticas al abrir sesión
   useEffect(() => {
     if (!currentUser?.id) return
     getNotifications(currentUser.id).then((res) => {
       const docs = (res.data as unknown[]) ?? []
       setUnreadCount(docs.filter((d: unknown) => !(d as { read?: boolean }).read).length)
     })
-  }, [currentUser?.id, page])
+    // RN-07, RN-10, RN-03 en background — solo cuando hay org activa
+    const orgId = currentUser?.organization?.id
+    if (orgId) checkAndApplyAutoTransitions(String(orgId)).catch(() => {})
+  }, [currentUser?.id])
 
   const isAdmin = currentUser?.role === 'administrator'
-  const visibleNav = nav.filter((n) => {
-    if (n.id === 'usuarios' && !isAdmin) return false
-    if (n.id === 'parametros' && !isAdmin) return false
-    return true
-  })
+
+  const ROLE_NAV_ALLOWLIST: Record<string, ReadonlyArray<string>> = {
+    administrator:         ['panel','aspectos','legales','objetivos','auditorias','conformidades','incidentes','capacitacion','evidencias','reportes','usuarios','parametros'],
+    senior_management:     ['panel','objetivos','auditorias','conformidades','incidentes','reportes'],
+    environmental_manager: ['panel','aspectos','legales','objetivos','auditorias','conformidades','incidentes','capacitacion','evidencias','reportes'],
+    auditor:               ['panel','aspectos','legales','auditorias','conformidades','reportes'],
+    collaborator:          ['panel','incidentes','capacitacion'],
+    supplier:              ['panel','evidencias'],
+  }
+  const allowedIds = ROLE_NAV_ALLOWLIST[currentUser?.role ?? ''] ?? ROLE_NAV_ALLOWLIST['collaborator']
+  const visibleNav = nav.filter((n) => allowedIds.includes(n.id))
+
+  // Auto-redirigir si la página actual no está permitida para este rol
+  useEffect(() => {
+    if (page === 'notificaciones') return
+    if (page !== 'panel' && !allowedIds.includes(page)) setPage('panel')
+  }, [page, currentUser?.role])
 
   const current = nav.find((n) => n.id === page)
   const hour = new Date().getHours()
@@ -2580,6 +4128,9 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
       ? `Aquí tienes el resumen ambiental de ${orgName}.`
       : `${orgName} · ${roleLabel}`
 
+  const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null)
+  const [selectedAspectId, setSelectedAspectId] = useState<string | null>(null)
+
   const tablePages: PageId[] = [
     'aspectos',
     'legales',
@@ -2591,13 +4142,25 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
   ]
 
   const content = useMemo(() => {
+    // Guardia de acceso por rol
+    if (page !== 'panel' && page !== 'notificaciones' && !allowedIds.includes(page)) {
+      return <AccessDenied />
+    }
     if (page === 'panel') return <Dashboard go={setPage} />
+    if (page === 'auditorias' && selectedAuditId)
+      return <AuditDetail auditId={selectedAuditId} onBack={() => setSelectedAuditId(null)} />
+    if (page === 'aspectos' && selectedAspectId)
+      return <AspectDetail aspectId={selectedAspectId} onBack={() => setSelectedAspectId(null)} />
     if (tablePages.includes(page))
       return (
         <TablePage
           page={page}
           onAdd={() => setModal(true)}
           refreshKey={refreshKey}
+          onRowClick={(id) => {
+            if (page === 'auditorias') setSelectedAuditId(id)
+            if (page === 'aspectos') setSelectedAspectId(id)
+          }}
         />
       )
     if (page === 'objetivos') return <ObjectivesPage onAdd={() => setModal(true)} />
@@ -2607,7 +4170,7 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
     if (page === 'notificaciones') return <NotificationsPage />
     return null
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, refreshKey])
+  }, [page, refreshKey, selectedAuditId, selectedAspectId])
 
   const initials = currentUser ? getInitials(currentUser.name) : '?'
 
@@ -2652,7 +4215,9 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{currentUser?.name ?? '—'}</p>
-              <p className="truncate text-xs text-white/45">{roleLabel}</p>
+              <div className="mt-1">
+                <RoleBadge role={currentUser?.role ?? 'collaborator'} size="xs" />
+              </div>
             </div>
             <button
               onClick={onLogout}
@@ -2730,16 +4295,14 @@ function EcoCertShell({ onLogout }: { onLogout: () => void }) {
         <main className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">{content}</main>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[#CBD8CB] bg-white px-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        {/* Barra móvil dinámica: primeros 4 ítems del rol + "Más" */}
         {[
-          ['panel', 'Panel', 'grid'],
-          ['aspectos', 'Aspectos', 'leaf'],
-          ['objetivos', 'Objetivos', 'target'],
-          ['auditorias', 'Auditorías', 'clipboard'],
-          ['reportes', 'Más', 'menu'],
+          ...visibleNav.slice(0, 4).map((n) => [n.id, n.label.length > 8 ? n.label.split(' ')[0] : n.label, n.icon] as const),
+          ['__mas__', 'Más', 'menu'] as const,
         ].map((n) => (
           <button
             key={n[0]}
-            onClick={() => setPage(n[0] as PageId)}
+            onClick={() => n[0] === '__mas__' ? setMenu(true) : setPage(n[0] as PageId)}
             className={`flex min-h-16 flex-col items-center justify-center gap-1 text-[10px] font-medium ${page === n[0] ? 'text-[#2F6B3F]' : 'text-[#6B776D]'}`}
           >
             <Icon name={n[2] as IconName} size={20} />

@@ -1,7 +1,0 @@
-{
-  "task_id": "task-ecocert-360",
-  "task_description": "Make EcoCert 360 functional: extend Payload collections (5 new + field additions to 6 existing), create a server actions layer (src/actions/ecocert.ts), and wire the static SPA (EcoCertApp.tsx) to live Payload data with auth, real KPIs, per-page CRUD modals, role-gated UI, and business rules RN-01/02/03/04/05/08/12.",
-  "status": "completed",
-  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
-  "blocked_reason": null
-}

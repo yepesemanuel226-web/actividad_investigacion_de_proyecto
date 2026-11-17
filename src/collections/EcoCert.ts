@@ -22,15 +22,46 @@ export const Organizations: CollectionConfig = {
   slug: 'organizations',
   admin: { group: 'EcoCert 360', useAsTitle: 'name' },
   access: {
-    create: isAdmin,
+    create: () => true,
     delete: isAdmin,
     read: ({ req }) => Boolean(req.user),
-    update: isAdmin,
+    update: ({ req }) =>
+      req.user?.collection === 'admins' || req.user?.collection === 'users',
   },
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'nit', type: 'text', required: true, unique: true },
     { name: 'sector', type: 'text', required: true },
+    {
+      name: 'status',
+      type: 'select',
+      required: true,
+      defaultValue: 'pending',
+      options: [
+        { label: '⏳ Pendiente de aprobación', value: 'pending' },
+        { label: '✅ Activa', value: 'active' },
+        { label: '🚫 Suspendida', value: 'suspended' },
+      ],
+      admin: {
+        description: 'Solo un administrador puede activar o suspender una organización.',
+      },
+      // Solo admins del panel pueden cambiar el estado
+      access: {
+        create: () => false,          // siempre nace como 'pending' (defaultValue)
+        update: ({ req }: { req: { user?: { collection?: string } | null } }) =>
+          req.user?.collection === 'admins',
+      },
+    },
+    {
+      name: 'requestedAt',
+      type: 'date',
+      admin: { readOnly: true, description: 'Fecha en que se envió la solicitud de registro.' },
+    },
+    {
+      name: 'approvedAt',
+      type: 'date',
+      admin: { readOnly: true, description: 'Fecha en que fue aprobada.' },
+    },
   ],
 }
 
@@ -60,6 +91,16 @@ export const Users: CollectionConfig = {
         { label: 'Colaborador', value: 'collaborator' },
         { label: 'Proveedor', value: 'supplier' },
       ],
+      access: {
+        // Bloquea asignación de roles privilegiados al crear desde la API pública
+        create: ({ data }: { data?: Record<string, unknown> }) => {
+          const restricted = ['administrator', 'senior_management']
+          return !restricted.includes(data?.role as string)
+        },
+        // Solo admins del panel CMS pueden cambiar el rol de un usuario
+        update: ({ req }: { req: { user?: { collection?: string } | null } }) =>
+          req.user?.collection === 'admins',
+      },
     },
     { name: 'active', type: 'checkbox', defaultValue: true },
     { name: 'responsible', type: 'relationship', relationTo: 'users' },

@@ -169,6 +169,11 @@ export interface Config {
     audits: Audit;
     'non-conformities': NonConformity;
     notifications: Notification;
+    'objective-progress': ObjectiveProgress;
+    incidents: Incident;
+    trainings: Training;
+    evidences: Evidence;
+    'audit-log': AuditLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -189,6 +194,11 @@ export interface Config {
     audits: AuditsSelect<false> | AuditsSelect<true>;
     'non-conformities': NonConformitiesSelect<false> | NonConformitiesSelect<true>;
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
+    'objective-progress': ObjectiveProgressSelect<false> | ObjectiveProgressSelect<true>;
+    incidents: IncidentsSelect<false> | IncidentsSelect<true>;
+    trainings: TrainingsSelect<false> | TrainingsSelect<true>;
+    evidences: EvidencesSelect<false> | EvidencesSelect<true>;
+    'audit-log': AuditLogSelect<false> | AuditLogSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -196,12 +206,12 @@ export interface Config {
     'payload-llm-instructions': PayloadLlmInstructionsSelect<false> | PayloadLlmInstructionsSelect<true>;
   };
   db: {
-    defaultIDType: string;
+    defaultIDType: number;
   };
-  fallbackLocale: ('false' | 'none' | 'null') | false | null | 'en' | 'en'[];
+  fallbackLocale: null;
   globals: {};
   globalsSelect: {};
-  locale: 'en';
+  locale: null;
   widgets: {
     welcome: WelcomeWidget;
     collections: CollectionsWidget;
@@ -256,32 +266,45 @@ export interface UserAuthOperations {
  * via the `definition` "admins".
  */
 export interface Admin {
-  id: string;
-  figmaHandle?: string | null;
-  figmaImageUrl?: string | null;
-  userGroups?: string[] | null;
-  makePermission?: ('view' | 'edit') | null;
-  email?: string | null;
+  id: number;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+        refreshCount?: number | null;
+        refreshedAt?: string | null;
+      }[]
+    | null;
+  password?: string | null;
   collection: 'admins';
 }
 /**
@@ -289,28 +312,29 @@ export interface Admin {
  * via the `definition` "users".
  */
 export interface User {
-  id: string;
+  id: number;
   name: string;
-  organization: string | Organization;
+  organization: number | Organization;
   role: 'administrator' | 'senior_management' | 'environmental_manager' | 'auditor' | 'collaborator' | 'supplier';
   active?: boolean | null;
+  responsible?: (number | null) | User;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -339,27 +363,39 @@ export interface User {
  * via the `definition` "organizations".
  */
 export interface Organization {
-  id: string;
+  id: number;
   name: string;
   nit: string;
   sector: string;
+  /**
+   * Solo un administrador puede activar o suspender una organización.
+   */
+  status: 'pending' | 'active' | 'suspended';
+  /**
+   * Fecha en que se envió la solicitud de registro.
+   */
+  requestedAt?: string | null;
+  /**
+   * Fecha en que fue aprobada.
+   */
+  approvedAt?: string | null;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -369,29 +405,27 @@ export interface Organization {
  * via the `definition` "media".
  */
 export interface Media {
-  id: string;
+  id: number;
   alt: string;
-  _h_folders?: (string | null) | Folder;
-  _h_tags?: (string | Tag)[] | null;
-  prefix?: string | null;
-  _objectKey?: string | null;
+  _h_folders?: (number | null) | Folder;
+  _h_tags?: (number | Tag)[] | null;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -423,26 +457,26 @@ export interface Media {
  * via the `definition` "folders".
  */
 export interface Folder {
-  id: string;
-  _h_folders?: (string | null) | Folder;
+  id: number;
+  _h_folders?: (number | null) | Folder;
   name: string;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -454,26 +488,26 @@ export interface Folder {
  * via the `definition` "tags".
  */
 export interface Tag {
-  id: string;
-  _h_tags?: (string | null) | Tag;
+  id: number;
+  _h_tags?: (number | null) | Tag;
   name: string;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -485,8 +519,8 @@ export interface Tag {
  * via the `definition` "aspects".
  */
 export interface Aspect {
-  id: string;
-  organization: string | Organization;
+  id: number;
+  organization: number | Organization;
   activity: string;
   name: string;
   impact: string;
@@ -495,23 +529,15 @@ export interface Aspect {
   scope?: number | null;
   significance?: number | null;
   level: 'Alta' | 'Media' | 'Baja' | 'Pendiente';
-  createdBy?:
-    | ({
-        relationTo: 'admins';
-        value: string | Admin;
-      } | null)
-    | ({
-        relationTo: 'users';
-        value: string | User;
-      } | null);
+  createdBy?: (number | null) | User;
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -521,30 +547,31 @@ export interface Aspect {
  * via the `definition` "legal-requirements".
  */
 export interface LegalRequirement {
-  id: string;
-  organization: string | Organization;
+  id: number;
+  organization: number | Organization;
   title: string;
   issuer: string;
-  aspect?: (string | null) | Aspect;
+  aspect?: (number | null) | Aspect;
   nextReview: string;
   compliance: 'Cumple' | 'No cumple' | 'Sin evaluar';
+  responsible?: (number | null) | User;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -554,15 +581,15 @@ export interface LegalRequirement {
  * via the `definition` "objectives".
  */
 export interface Objective {
-  id: string;
-  organization: string | Organization;
+  id: number;
+  organization: number | Organization;
   title: string;
   indicator: string;
   target: number;
   currentValue?: number | null;
   unit: string;
   deadline: string;
-  owner: string | User;
+  owner: number | User;
   status: 'Borrador' | 'En aprobación' | 'Activo' | 'Desviado' | 'Cumplido' | 'Cancelado';
   actions?:
     | {
@@ -570,26 +597,27 @@ export interface Objective {
         resources: string;
         deadline: string;
         completed?: boolean | null;
+        responsible: number | User;
         id?: string | null;
       }[]
     | null;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -599,31 +627,41 @@ export interface Objective {
  * via the `definition` "audits".
  */
 export interface Audit {
-  id: string;
-  organization: string | Organization;
+  id: number;
+  organization: number | Organization;
   area: string;
   scope: string;
   criteria: string;
   date: string;
-  auditor: string | User;
+  auditor: number | User;
   status: 'Programada' | 'Reprogramada' | 'En ejecución' | 'Cerrada';
+  findings?:
+    | {
+        description: string;
+        criteria: string;
+        criticality: 'Normal' | 'Crítica';
+        isNonConformity?: boolean | null;
+        evidenceUrl?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -633,8 +671,8 @@ export interface Audit {
  * via the `definition` "non-conformities".
  */
 export interface NonConformity {
-  id: string;
-  organization: string | Organization;
+  id: number;
+  organization: number | Organization;
   code: string;
   description: string;
   origin: 'Auditoría' | 'Requisito legal';
@@ -642,24 +680,34 @@ export interface NonConformity {
   status: 'Detectada' | 'Escalada' | 'En análisis' | 'En ejecución' | 'Vencida' | 'En verificación' | 'Cerrada';
   rootCause?: string | null;
   deadline?: string | null;
-  owner?: (string | null) | User;
+  owner?: (number | null) | User;
+  audit?: (number | null) | Audit;
+  legalRequirement?: (number | null) | LegalRequirement;
+  correctiveAction?: {
+    description?: string | null;
+    responsible?: (number | null) | User;
+    resources?: string | null;
+    deadline?: string | null;
+    effective?: ('true' | 'false' | '') | null;
+  };
+  closedAt?: string | null;
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -669,8 +717,8 @@ export interface NonConformity {
  * via the `definition` "notifications".
  */
 export interface Notification {
-  id: string;
-  user: string | User;
+  id: number;
+  user: number | User;
   message: string;
   type: string;
   read?: boolean | null;
@@ -678,20 +726,189 @@ export interface Notification {
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "objective-progress".
+ */
+export interface ObjectiveProgress {
+  id: number;
+  objective: number | Objective;
+  value: number;
+  comment?: string | null;
+  date: string;
+  user: number | User;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "incidents".
+ */
+export interface Incident {
+  id: number;
+  organization: number | Organization;
+  type: 'incidente' | 'emergencia';
+  description: string;
+  date: string;
+  location?: string | null;
+  severity: 'Baja' | 'Media' | 'Alta';
+  responsePlan?: string | null;
+  status: 'Abierto' | 'En seguimiento' | 'Cerrado';
+  reportedBy?: (number | null) | User;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "trainings".
+ */
+export interface Training {
+  id: number;
+  organization: number | Organization;
+  topic: string;
+  date: string;
+  attendee?: (number | null) | User;
+  result?: number | null;
+  competent?: ('Sí' | 'No') | null;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "evidences".
+ */
+export interface Evidence {
+  id: number;
+  organization: number | Organization;
+  sourceTable?: string | null;
+  recordId?: string | null;
+  description: string;
+  statusReview: 'Pendiente' | 'Aprobada' | 'Rechazada';
+  uploadedBy?: (number | null) | User;
+  file?: (number | null) | Media;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-log".
+ */
+export interface AuditLog {
+  id: number;
+  organization: number | Organization;
+  user?: (number | null) | User;
+  table: string;
+  recordId: string;
+  action: 'crear' | 'editar' | 'cambio_estado';
+  detail?: string | null;
+  date?: string | null;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: number | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -701,7 +918,7 @@ export interface Notification {
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
-  id: string;
+  id: number;
   key: string;
   data:
     | {
@@ -718,65 +935,85 @@ export interface PayloadKv {
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
-  id: string;
+  id: number;
   document?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'media';
-        value: string | Media;
+        value: number | Media;
       } | null)
     | ({
         relationTo: 'folders';
-        value: string | Folder;
+        value: number | Folder;
       } | null)
     | ({
         relationTo: 'tags';
-        value: string | Tag;
+        value: number | Tag;
       } | null)
     | ({
         relationTo: 'organizations';
-        value: string | Organization;
+        value: number | Organization;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null)
     | ({
         relationTo: 'aspects';
-        value: string | Aspect;
+        value: number | Aspect;
       } | null)
     | ({
         relationTo: 'legal-requirements';
-        value: string | LegalRequirement;
+        value: number | LegalRequirement;
       } | null)
     | ({
         relationTo: 'objectives';
-        value: string | Objective;
+        value: number | Objective;
       } | null)
     | ({
         relationTo: 'audits';
-        value: string | Audit;
+        value: number | Audit;
       } | null)
     | ({
         relationTo: 'non-conformities';
-        value: string | NonConformity;
+        value: number | NonConformity;
       } | null)
     | ({
         relationTo: 'notifications';
-        value: string | Notification;
+        value: number | Notification;
+      } | null)
+    | ({
+        relationTo: 'objective-progress';
+        value: number | ObjectiveProgress;
+      } | null)
+    | ({
+        relationTo: 'incidents';
+        value: number | Incident;
+      } | null)
+    | ({
+        relationTo: 'trainings';
+        value: number | Training;
+      } | null)
+    | ({
+        relationTo: 'evidences';
+        value: number | Evidence;
+      } | null)
+    | ({
+        relationTo: 'audit-log';
+        value: number | AuditLog;
       } | null);
   globalSlug?: string | null;
   user:
     | {
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       }
     | {
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       };
   updatedAt: string;
   createdAt: string;
@@ -786,15 +1023,15 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: string;
+  id: number;
   user:
     | {
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       }
     | {
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       };
   key?: string | null;
   value?:
@@ -814,7 +1051,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: string;
+  id: number;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -834,20 +1071,20 @@ export interface PayloadLlmInstruction {
   createdBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedBy?:
     | ({
         relationTo: 'admins';
-        value: string | Admin;
+        value: number | Admin;
       } | null)
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null);
   updatedAt: string;
   createdAt: string;
@@ -857,15 +1094,27 @@ export interface PayloadLlmInstruction {
  * via the `definition` "admins_select".
  */
 export interface AdminsSelect<T extends boolean = true> {
-  figmaHandle?: T;
-  figmaImageUrl?: T;
-  userGroups?: T;
-  makePermission?: T;
-  email?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
   createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  resetPasswordRequestedAt?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+        refreshCount?: T;
+        refreshedAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -875,8 +1124,6 @@ export interface MediaSelect<T extends boolean = true> {
   alt?: T;
   _h_folders?: T;
   _h_tags?: T;
-  prefix?: T;
-  _objectKey?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -942,6 +1189,9 @@ export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   nit?: T;
   sector?: T;
+  status?: T;
+  requestedAt?: T;
+  approvedAt?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -956,6 +1206,7 @@ export interface UsersSelect<T extends boolean = true> {
   organization?: T;
   role?: T;
   active?: T;
+  responsible?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1008,6 +1259,7 @@ export interface LegalRequirementsSelect<T extends boolean = true> {
   aspect?: T;
   nextReview?: T;
   compliance?: T;
+  responsible?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1034,6 +1286,7 @@ export interface ObjectivesSelect<T extends boolean = true> {
         resources?: T;
         deadline?: T;
         completed?: T;
+        responsible?: T;
         id?: T;
       };
   createdBy?: T;
@@ -1053,6 +1306,16 @@ export interface AuditsSelect<T extends boolean = true> {
   date?: T;
   auditor?: T;
   status?: T;
+  findings?:
+    | T
+    | {
+        description?: T;
+        criteria?: T;
+        criticality?: T;
+        isNonConformity?: T;
+        evidenceUrl?: T;
+        id?: T;
+      };
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1072,6 +1335,18 @@ export interface NonConformitiesSelect<T extends boolean = true> {
   rootCause?: T;
   deadline?: T;
   owner?: T;
+  audit?: T;
+  legalRequirement?: T;
+  correctiveAction?:
+    | T
+    | {
+        description?: T;
+        responsible?: T;
+        resources?: T;
+        deadline?: T;
+        effective?: T;
+      };
+  closedAt?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1087,6 +1362,90 @@ export interface NotificationsSelect<T extends boolean = true> {
   type?: T;
   read?: T;
   reference?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "objective-progress_select".
+ */
+export interface ObjectiveProgressSelect<T extends boolean = true> {
+  objective?: T;
+  value?: T;
+  comment?: T;
+  date?: T;
+  user?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "incidents_select".
+ */
+export interface IncidentsSelect<T extends boolean = true> {
+  organization?: T;
+  type?: T;
+  description?: T;
+  date?: T;
+  location?: T;
+  severity?: T;
+  responsePlan?: T;
+  status?: T;
+  reportedBy?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "trainings_select".
+ */
+export interface TrainingsSelect<T extends boolean = true> {
+  organization?: T;
+  topic?: T;
+  date?: T;
+  attendee?: T;
+  result?: T;
+  competent?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "evidences_select".
+ */
+export interface EvidencesSelect<T extends boolean = true> {
+  organization?: T;
+  sourceTable?: T;
+  recordId?: T;
+  description?: T;
+  statusReview?: T;
+  uploadedBy?: T;
+  file?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-log_select".
+ */
+export interface AuditLogSelect<T extends boolean = true> {
+  organization?: T;
+  user?: T;
+  table?: T;
+  recordId?: T;
+  action?: T;
+  detail?: T;
+  date?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1187,7 +1546,12 @@ export interface CollectionQueryWidget {
       | 'objectives'
       | 'audits'
       | 'non-conformities'
-      | 'notifications';
+      | 'notifications'
+      | 'objective-progress'
+      | 'incidents'
+      | 'trainings'
+      | 'evidences'
+      | 'audit-log';
     where?:
       | {
           [k: string]: unknown;
@@ -1223,6 +1587,11 @@ export interface ActivityWidget {
           | 'audits'
           | 'non-conformities'
           | 'notifications'
+          | 'objective-progress'
+          | 'incidents'
+          | 'trainings'
+          | 'evidences'
+          | 'audit-log'
         )[]
       | null;
   };
